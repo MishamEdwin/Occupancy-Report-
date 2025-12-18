@@ -1,24 +1,366 @@
-.title{
-  text-align: center;
+/* Body.css - Vibrant Professional Theme */
+
+.title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #333;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.05);
+    position: relative;
+    display: inline-block;
 }
 
-.table-container {
-    padding: 20px;
+.title::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 0;
+    width: 40px;
+    height: 4px;
+    background: #00796b;
+    border-radius: 2px;
+}
+
+
+
+.dashboard-container {
+    padding: 30px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background-color: #f9fbfd;
+    min-height: 100vh;
+}
+
+/* Header/Filter Bar - Clean White with a subtle border */
+.filter-section {
+    background: #ffffff;
+    padding: 16px 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border: 1px solid #e0e0e0;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #00796b; /* Emerald accent color */
+    font-size: 14px;
+}
+
+
+/* Custom Dropdown Styling */
+.custom-dropdown {
+    position: relative;
+    width: 280px;
+    font-size: 14px;
+}
+
+.dropdown-selected {
+    background: #fff;
+    padding: 8px 12px;
+    border: 1px solid #00796b;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #004d40;
+    font-weight: 500;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 105%;
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #00796b;
+    border-radius: 6px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    z-index: 100;
+    padding: 8px;
+}
+
+.dropdown-search {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+/* FIXED SIZE AND SCROLL FOR DROPDOWN OPTIONS */
+.dropdown-options {
+    max-height: 250px; /* Fixed vertical size */
+    overflow-y: auto;  /* Enable scroll */
+}
+
+.dropdown-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background: #e0f2f1;
+}
+
+.dropdown-item.active {
+    background: #00796b;
+    color: #fff;
+}
+
+.no-results {
+    padding: 8px;
+    color: #999;
+    text-align: center;
+}
+
+/* Scrollbar styling for dropdown */
+.dropdown-options::-webkit-scrollbar {
+    width: 6px;
+}
+.dropdown-options::-webkit-scrollbar-thumb {
+    background: #00796b;
+    border-radius: 10px;
+}
+
+/* Table Container */
+.table-wrapper {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e0e0e0;
+    
+    /* FIXED SIZE & SCROLL LOGIC */
+    height: 600px;             /* Fixed height */
+    overflow-y: auto;          /* Vertical scroll */
+    overflow-x: auto;          /* Horizontal scroll for small screens */
+    position: relative;
 }
 
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    text-align: left;
+    font-size: 13px;
+    table-layout: auto;        /* Allows columns to size to content */
 }
 
-.data-table th {
-    padding: 10px;
-    background-color: #f4f4f4;
-    border: 1px solid black;
+/* Vibrant Sapphire Blue Header */
+
+.data-table thead th {
+    background: #004d40;
+    color: #ffffff;
+    padding: 14px 12px;
+    font-weight: 600;
+    text-align: left;
+    border-bottom: 2px solid #00796b;
+    
+    /* Keeps header fixed at the top of the .table-wrapper */
+    position: sticky;
+    top: 0; 
+    z-index: 10; 
+}
+
+/* Custom Scrollbar Styling (Vibrant Teal) */
+.table-wrapper::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.table-wrapper::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: #00796b;
+    border-radius: 10px;
+}
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #004d40;
+}
+
+.header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sort-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+}
+
+.sort-label:hover {
+    color: #b2ebf2; /* Light hover effect */
+}
+
+/* Dropdowns in the header */
+.column-filter-select {
+    width: 100%;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #00796b;
+    background: #e0f2f1; /* Very light teal background for inputs */
+    color: #004d40;
+    font-size: 11px;
+    outline: none;
+}
+
+/* Table Body */
+.data-table tbody tr {
+    border-bottom: 1px solid #e0e0e0;
+    transition: background 0.2s;
+}
+
+.data-table tbody tr:nth-child(even) {
+    background-color: #f5f5f5; /* Subtle alternating row color */
+}
+
+.data-table tbody tr:hover {
+    background-color: #e0f2f1; /* Light teal highlight on hover */
 }
 
 .data-table td {
-    padding: 10px;
-    border: 1px solid black;
+    padding: 12px;
+    color: #333333;
+    vertical-align: middle;
+}
+
+/* Data-specific Classes */
+.sl-col {
+    font-weight: 600;
+    color: #757575;
+}
+
+.segment-cell {
+    font-weight: 600;
+    color: #0288d1; /* Sapphire Blue for emphasis */
+}
+
+.num-cell {
+    text-align: right;
+    font-family: monospace;
+    font-weight: 500;
+}
+
+/* Negative value alert color */
+.negative-val {
+    color: #d32f2f; /* Professional Red */
+    font-weight: 600;
+}
+
+
+/* Pagination Styling */
+.pagination-container {
+    display: flex;
+    justify-content: space-between; /* Spread across the footer */
+    align-items: center;
+    margin-top: 24px;
+    padding: 15px 25px;
+    background: #ffffff;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.range-selector {
+    font-size: 14px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pagination-select {
+    padding: 4px 8px;
+    border: 1px solid #00796b;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-weight: 600;
+    color: #004d40;
+}
+
+.page-navigation {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.total-records {
+    font-size: 14px;
+    color: #757575;
+}
+
+/* Existing pagination-btn and pagination-info styles apply here... */
+
+
+.pagination-btn {
+    padding: 8px 16px;
+    border: 1px solid #00796b;
+    background-color: #ffffff;
+    color: #00796b;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background-color: #00796b;
+    color: white;
+}
+
+.pagination-btn:disabled {
+    border-color: #e0e0e0;
+    color: #bdbdbd;
+    cursor: not-allowed;
+}
+
+.pagination-info {
+    font-size: 14px;
+    color: #444;
+}
+
+
+
+/* Highlights the All option in dropdown */
+.all-option {
+    font-weight: bold;
+    border-bottom: 1px solid #00796b;
+    color: #00796b;
+}
+
+/* Summary Row Styling */
+.summary-row {
+    background-color: #e0f2f1 !important; /* Vibrant light teal */
+    font-weight: bold;
+}
+
+.summary-text {
+    color: #004d40;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-left: 20px;
+}
+
+.summary-row td {
+    border-top: 2px solid #00796b;
+    border-bottom: 2px solid #00796b;
+}
+/* Ensure dropdown defaults look professional */
+.column-filter-select {
+    border: 1px solid #00796b;
+    background: #ffffff;
+    color: #004d40;
 }
