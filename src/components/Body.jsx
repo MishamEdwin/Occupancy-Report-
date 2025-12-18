@@ -3,7 +3,7 @@ import xl_data from '/src/data/xl_data.json';
 
 function Body() {
     const [data, setData] = useState([]);
-    const [selectedOccupancy, setSelectedOccupancy] = useState('All');
+    const [selectedOccupancies, setSelectedOccupancies] = useState(['All']);
     
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [occupancySearch, setOccupancySearch] = useState('');
@@ -76,57 +76,57 @@ function Body() {
         opt.toLowerCase().includes(occupancySearch.toLowerCase())
     );
 
-    // 2. Main logic for Subtotals when "All" is selected
+    // 2. Main logic for grouping by segment - one row per segment with summed values
     const filteredData = useMemo(() => {
-        // Step A: Apply basic filters
-        const baseFiltered = processedData.filter(row => {
-            const matchesOccupancy = selectedOccupancy === 'All' || row.OccupancyName === selectedOccupancy;
-            const matchesColumnFilters = Object.keys(columnFilters).every(key => {
+        // Step A: Apply occupancy filter
+        const baseFiltered = selectedOccupancies.includes('All')
+            ? processedData
+            : processedData.filter(row => selectedOccupancies.includes(row.OccupancyName));
+
+        // Step B: Apply column filters
+        const columnFiltered = baseFiltered.filter(row => {
+            return Object.keys(columnFilters).every(key => {
                 if (columnFilters[key] === 'Select') return true;
                 return String(row[key]) === columnFilters[key];
             });
-            return matchesOccupancy && matchesColumnFilters;
         });
 
-        // Step B: If "All" is selected, group by segment and add subtotals
-        if (selectedOccupancy === 'All') {
-            const groups = {};
-            baseFiltered.forEach(row => {
-                if (!groups[row.Segments]) groups[row.Segments] = [];
-                groups[row.Segments].push(row);
-            });
+        // Step C: Group by segment and sum all values
+        const groups = {};
+        columnFiltered.forEach(row => {
+            if (!groups[row.Segments]) {
+                groups[row.Segments] = {
+                    id: row.Segments,
+                    Segments: row.Segments,
+                    NOP: 0,
+                    GWP: 0,
+                    GIC: 0,
+                    GEP: 0,
+                    NOC: 0,
+                    deltaRiskSI: 0,
+                    isSummary: false
+                };
+            }
+            groups[row.Segments].NOP += row.NOP;
+            groups[row.Segments].GWP += row.GWP;
+            groups[row.Segments].GIC += row.GIC;
+            groups[row.Segments].GEP += row.GEP;
+            groups[row.Segments].NOC += row.NOC;
+            groups[row.Segments].deltaRiskSI += row.deltaRiskSI;
+        });
 
-            const resultWithSubtotals = [];
-            Object.keys(groups).forEach(segment => {
-                const rows = groups[segment];
-                resultWithSubtotals.push(...rows);
+        // Step D: Calculate GIC/GEP and AvgRate for each segment
+        const result = Object.keys(groups).sort().map(segment => {
+            const group = groups[segment];
+            return {
+                ...group,
+                GicOverGep: group.GEP === 0 ? 0 : (group.GIC / group.GEP),
+                AvgRate: group.deltaRiskSI === 0 ? 0 : (group.GWP / group.deltaRiskSI) * 1000
+            };
+        });
 
-                // Calculate Totals
-                const totalNOP = rows.reduce((sum, r) => sum + r.NOP, 0);
-                const totalGWP = rows.reduce((sum, r) => sum + r.GWP, 0);
-                const totalGIC = rows.reduce((sum, r) => sum + r.GIC, 0);
-                const totalGEP = rows.reduce((sum, r) => sum + r.GEP, 0);
-                const totalNOC = rows.reduce((sum, r) => sum + r.NOC, 0);
-                const totalSI = rows.reduce((sum, r) => sum + r.deltaRiskSI, 0);
-
-                resultWithSubtotals.push({
-                    id: `total-${segment}`,
-                    Segments: `${segment} Total`,
-                    isSummary: true,
-                    NOP: totalNOP,
-                    GWP: totalGWP,
-                    GIC: totalGIC,
-                    GEP: totalGEP,
-                    NOC: totalNOC,
-                    GicOverGep: totalGEP === 0 ? 0 : (totalGIC / totalGEP),
-                    AvgRate: totalSI === 0 ? 0 : (totalGWP / totalSI) * 1000
-                });
-            });
-            return resultWithSubtotals;
-        }
-
-        return baseFiltered;
-    }, [processedData, selectedOccupancy, columnFilters]);
+        return result;
+    }, [processedData, selectedOccupancies, columnFilters]);
 
     const sortedData = useMemo(() => {
         let sortableItems = [...filteredData];
@@ -159,7 +159,7 @@ function Body() {
                 <label className="filter-label">Occupancy:</label>
                 <div className="custom-dropdown" ref={dropdownRef}>
                     <div className="dropdown-selected" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-                        {selectedOccupancy === 'All' ? 'All (Summarized)' : selectedOccupancy}
+                        {selectedOccupancies.length === 0 ? 'Select...' : selectedOccupancies.length === occupancyOptions.length ? 'All Selected' : `${selectedOccupancies.length} selected`}
                         <span className="arrow">{isDropdownOpen ? '▲' : '▼'}</span>
                     </div>
                     {isDropdownOpen && (
@@ -173,19 +173,32 @@ function Body() {
                                 autoFocus
                             />
                             <div className="dropdown-options">
-                                {filteredOccupancyOptions.map(opt => (
-                                    <div 
-                                        key={opt} 
-                                        className={`dropdown-item ${selectedOccupancy === opt ? 'active' : ''} ${opt === 'All' ? 'all-option' : ''}`}
-                                        onClick={() => {
-                                            setSelectedOccupancy(opt);
-                                            setIsDropdownOpen(false);
-                                            setOccupancySearch('');
-                                        }}
-                                    >
-                                        {opt}
-                                    </div>
-                                ))}
+                                {filteredOccupancyOptions.map(opt => {
+                                    const isSelected = selectedOccupancies.includes(opt);
+                                    return (
+                                        <div 
+                                            key={opt} 
+                                            className={`dropdown-item ${isSelected ? 'active' : ''} ${opt === 'All' ? 'all-option' : ''}`}
+                                            onClick={() => {
+                                                if (opt === 'All') {
+                                                    setSelectedOccupancies(isSelected ? [] : ['All']);
+                                                } else {
+                                                    let updated;
+                                                    if (isSelected) {
+                                                        updated = selectedOccupancies.filter(item => item !== opt && item !== 'All');
+                                                    } else {
+                                                        updated = selectedOccupancies.filter(item => item !== 'All');
+                                                        updated.push(opt);
+                                                    }
+                                                    setSelectedOccupancies(updated.length === 0 ? ['All'] : updated);
+                                                }
+                                            }}
+                                        >
+                                            <input type="checkbox" checked={isSelected} readOnly style={{ marginRight: 8 }} />
+                                            {opt}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
