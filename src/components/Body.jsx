@@ -1,191 +1,258 @@
-import React, { useState, useMemo } from 'react';
-
-const dummy_data = [
-    {
-        "UW Sub Channel": "(None)",
-        "GC Occupancies": "(None)",
-        "Sum of Prem": 0,
-        "Sum of Net Pol": 0,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 80241,
-        "Sum of Claim incurred in period": -86966,
-        "Sum of Delta risk SI": "(None)"
-    },
-    {
-        "UW Sub Channel": "(None)",
-        "GC Occupancies": 101,
-        "Sum of Prem": 0,
-        "Sum of Net Pol": 0,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 97968,
-        "Sum of Claim incurred in period": 0,
-        "Sum of Delta risk SI": "(None)"
-    },
-    {
-        "UW Sub Channel": "(None)",
-        "GC Occupancies": 7505,
-        "Sum of Prem": 0,
-        "Sum of Net Pol": 0,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 1147,
-        "Sum of Claim incurred in period": 0,
-        "Sum of Delta risk SI": "(None)"
-    },
-    {
-        "UW Sub Channel": "Banca PSU",
-        "GC Occupancies": "(None)",
-        "Sum of Prem": 0,
-        "Sum of Net Pol": 0,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 0,
-        "Sum of Claim incurred in period": 8000,
-        "Sum of Delta risk SI": 0
-    },
-    {
-        "UW Sub Channel": "Banca PSU",
-        "GC Occupancies": 100,
-        "Sum of Prem": 70744,
-        "Sum of Net Pol": 14,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 297595,
-        "Sum of Claim incurred in period": 0,
-        "Sum of Delta risk SI": 307992111
-    },
-    {
-        "UW Sub Channel": "Banca PSU",
-        "GC Occupancies": 10005,
-        "Sum of Prem": 0,
-        "Sum of Net Pol": 0,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 55203,
-        "Sum of Claim incurred in period": 1661380,
-        "Sum of Delta risk SI": 0
-    },
-    {
-        "UW Sub Channel": "Banca PSU",
-        "GC Occupancies": 1006,
-        "Sum of Prem": 1130,
-        "Sum of Net Pol": 1,
-        "Sum of Num claims registered": 0,
-        "Sum of Earned Prem": 5951,
-        "Sum of Claim incurred in period": 0,
-        "Sum of Delta risk SI": 1200000
-    },
-
-];
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import xl_data from '/src/data/xl_data.json';
 
 function Body() {
-    // occupancy filter state
+    const [data, setData] = useState([]);
     const [selectedOccupancy, setSelectedOccupancy] = useState('All');
+    
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [occupancySearch, setOccupancySearch] = useState('');
+    const dropdownRef = useRef(null);
 
-    // build list of unique occupancy codes (strings) from data; stable order
-    const occupancyOptions = useMemo(() => {
-        if (!Array.isArray(dummy_data) || dummy_data.length === 0) return [];
-        const set = new Set();
-        dummy_data.forEach(r => {
-            // convert undefined/null to explicit string so the dropdown can show it
-            const val = r['GC Occupancies'] === undefined || r['GC Occupancies'] === null
-                ? '(None)'
-                : String(r['GC Occupancies']);
-            set.add(val);
-        });
-        return ['All', ...Array.from(set)];
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+    
+    // 1. Default changed from 'All' to 'Select'
+    const [columnFilters, setColumnFilters] = useState({
+        Segments: 'Select', NOP: 'Select', GWP: 'Select', GIC: 'Select', GEP: 'Select', GicOverGep: 'Select', NOC: 'Select', AvgRate: 'Select'
+    });
+    
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
+
+    useEffect(() => {
+        setData(Array.isArray(xl_data) ? xl_data : []);
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-   // target headers you requested — added serial number as first column
-    const headers = ['Sl. No', 'NOP', 'GWP', 'GIC', 'GEP', 'GIC/GEP', 'NOC', 'Avg Rate'];
-
-    // robust parser to handle "(None)", comma thousands, parentheses for negatives, strings etc.
     const parseNumber = (val) => {
         if (val === null || val === undefined) return 0;
         if (typeof val === 'number') return val;
         const s = String(val).trim();
-        if (s === '' || s === '(None)' || s === '-' ) return 0;
-        // handle parentheses like "(86,966)" as negative
-        let negative = false;
-        let cleaned = s;
-        if (/^\(.+\)$/.test(cleaned)) {
-            negative = true;
-            cleaned = cleaned.slice(1, -1);
-        }
+        if (s === '' || s === '(None)' || s === '-') return 0;
+        let negative = s.startsWith('(') && s.endsWith(')');
+        let cleaned = negative ? s.slice(1, -1) : s;
         cleaned = cleaned.replace(/,/g, '').replace(/%/g, '');
         const n = parseFloat(cleaned);
-        if (isNaN(n)) return 0;
-        return negative ? -n : n;
+        return isNaN(n) ? 0 : (negative ? -n : n);
     };
 
-    const fmtNum = (n, opts = {}) => {
-        if (n === null || n === undefined || n === '-' || Number.isNaN(n)) return '-';
-        if (opts.percent) return (n).toFixed(2) + '%';
-        // show integers without decimals when they're whole numbers
-        return Number.isFinite(n) ? n.toLocaleString() : '-';
+    const fmtNum = (n) => {
+        if (n === null || n === undefined || Number.isNaN(n)) return '-';
+        return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '-';
     };
 
-    // filtered rows according to selected occupancy
-    const filteredData = useMemo(() => {
-        if (selectedOccupancy === 'All') return dummy_data;
-        return dummy_data.filter(row => {
-            const val = row['GC Occupancies'] === undefined || row['GC Occupancies'] === null
-                ? '(None)'
-                : String(row['GC Occupancies']);
-            return val === selectedOccupancy;
+    const processedData = useMemo(() => {
+        return data.map((row, index) => {
+            const GWP = parseNumber(row['Prem']);
+            const NOP = parseNumber(row['Net Pol']);
+            const GIC = parseNumber(row['Claim incurred in period']);
+            const GEP = parseNumber(row['Earned Prem']);
+            const NOC = parseNumber(row['Num claim registered']);
+            const deltaRiskSI = parseNumber(row['Delta risk SI']);
+            return {
+                id: index,
+                Segments: row['UW Sub Channel'] || '(None)',
+                OccupancyName: row['GC Occupancies Name'] || '(None)',
+                NOP, GWP, GIC, GEP, NOC, deltaRiskSI,
+                GicOverGep: GEP === 0 ? 0 : (GIC / GEP),
+                AvgRate: deltaRiskSI === 0 ? 0 : (GWP / deltaRiskSI) * 1000, // Fixed multiplier
+                isSummary: false
+            };
         });
-    }, [selectedOccupancy]);
+    }, [data]);
+
+    const occupancyOptions = useMemo(() => {
+        const uniqueValues = new Set(processedData.map(item => String(item.OccupancyName)));
+        return ['All', ...Array.from(uniqueValues).sort((a, b) => a.localeCompare(b))];
+    }, [processedData]);
+
+    const filteredOccupancyOptions = occupancyOptions.filter(opt =>
+        opt.toLowerCase().includes(occupancySearch.toLowerCase())
+    );
+
+    // 2. Main logic for Subtotals when "All" is selected
+    const filteredData = useMemo(() => {
+        // Step A: Apply basic filters
+        const baseFiltered = processedData.filter(row => {
+            const matchesOccupancy = selectedOccupancy === 'All' || row.OccupancyName === selectedOccupancy;
+            const matchesColumnFilters = Object.keys(columnFilters).every(key => {
+                if (columnFilters[key] === 'Select') return true;
+                return String(row[key]) === columnFilters[key];
+            });
+            return matchesOccupancy && matchesColumnFilters;
+        });
+
+        // Step B: If "All" is selected, group by segment and add subtotals
+        if (selectedOccupancy === 'All') {
+            const groups = {};
+            baseFiltered.forEach(row => {
+                if (!groups[row.Segments]) groups[row.Segments] = [];
+                groups[row.Segments].push(row);
+            });
+
+            const resultWithSubtotals = [];
+            Object.keys(groups).forEach(segment => {
+                const rows = groups[segment];
+                resultWithSubtotals.push(...rows);
+
+                // Calculate Totals
+                const totalNOP = rows.reduce((sum, r) => sum + r.NOP, 0);
+                const totalGWP = rows.reduce((sum, r) => sum + r.GWP, 0);
+                const totalGIC = rows.reduce((sum, r) => sum + r.GIC, 0);
+                const totalGEP = rows.reduce((sum, r) => sum + r.GEP, 0);
+                const totalNOC = rows.reduce((sum, r) => sum + r.NOC, 0);
+                const totalSI = rows.reduce((sum, r) => sum + r.deltaRiskSI, 0);
+
+                resultWithSubtotals.push({
+                    id: `total-${segment}`,
+                    Segments: `${segment} Total`,
+                    isSummary: true,
+                    NOP: totalNOP,
+                    GWP: totalGWP,
+                    GIC: totalGIC,
+                    GEP: totalGEP,
+                    NOC: totalNOC,
+                    GicOverGep: totalGEP === 0 ? 0 : (totalGIC / totalGEP),
+                    AvgRate: totalSI === 0 ? 0 : (totalGWP / totalSI) * 1000
+                });
+            });
+            return resultWithSubtotals;
+        }
+
+        return baseFiltered;
+    }, [processedData, selectedOccupancy, columnFilters]);
+
+    const sortedData = useMemo(() => {
+        let sortableItems = [...filteredData];
+        if (sortConfig.key !== null) {
+            sortableItems.sort((a, b) => {
+                // Keep summaries at the bottom of their respective segments during sort
+                if (a.isSummary && b.isSummary) return 0;
+                if (a.isSummary) return 1; 
+                if (b.isSummary) return -1;
+
+                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [filteredData, sortConfig]);
+
+    const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+    const paginatedData = useMemo(() => {
+        const firstPageIndex = (currentPage - 1) * itemsPerPage;
+        return sortedData.slice(firstPageIndex, firstPageIndex + itemsPerPage);
+    }, [sortedData, currentPage, itemsPerPage]);
+
+    const tableKeys = ['Segments', 'NOP', 'GWP', 'GIC', 'GEP', 'GicOverGep', 'NOC', 'AvgRate'];
 
     return (
-        <div className="table-container">
-            <div style={{ marginBottom: 12 }}>
-                <label htmlFor="occupancy-select" style={{ marginRight: 8 }}>Occupancies:</label>
-                <select
-                    id="occupancy-select"
-                    value={selectedOccupancy}
-                    onChange={(e) => setSelectedOccupancy(e.target.value)}
-                    disabled={occupancyOptions.length === 0}
-                >
-                    {occupancyOptions.map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                </select>
+        <div className="dashboard-container">
+            <div className="filter-section">
+                <label className="filter-label">Occupancy:</label>
+                <div className="custom-dropdown" ref={dropdownRef}>
+                    <div className="dropdown-selected" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+                        {selectedOccupancy === 'All' ? 'All (Summarized)' : selectedOccupancy}
+                        <span className="arrow">{isDropdownOpen ? '▲' : '▼'}</span>
+                    </div>
+                    {isDropdownOpen && (
+                        <div className="dropdown-menu">
+                            <input 
+                                type="text" 
+                                className="dropdown-search" 
+                                placeholder="Search occupancy..." 
+                                value={occupancySearch}
+                                onChange={(e) => setOccupancySearch(e.target.value)}
+                                autoFocus
+                            />
+                            <div className="dropdown-options">
+                                {filteredOccupancyOptions.map(opt => (
+                                    <div 
+                                        key={opt} 
+                                        className={`dropdown-item ${selectedOccupancy === opt ? 'active' : ''} ${opt === 'All' ? 'all-option' : ''}`}
+                                        onClick={() => {
+                                            setSelectedOccupancy(opt);
+                                            setIsDropdownOpen(false);
+                                            setOccupancySearch('');
+                                        }}
+                                    >
+                                        {opt}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <table className="data-table">
-                <thead>
-                    <tr>
-                        {headers.map(h => (
-                            <th key={h}>{h}</th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {filteredData.map((row, idx) => {
-                        const GWP = parseNumber(row['Sum of Prem']);
-                        const NOP = parseNumber(row['Sum of Net Pol']);
-                        const GIC = parseNumber(row['Sum of Claim incurred in period']);
-                        const GEP = parseNumber(row['Sum of Earned Prem']);
-                        const NOC = parseNumber(row['Sum of Num claims registered']);
-                        const deltaRiskSI = parseNumber(row['Sum of Delta risk SI']);
-                        // Terror Premium may be absent in some datasets -> treat as 0
-                        const terrorPremium = parseNumber(row['Terror Premium'] ?? 0);
-
-                        // calculations
-                        const gicOverGep = (GEP === 0) ? null : (GIC / GEP) * 100; // percent
-                        const avgRate = (deltaRiskSI === 0) ? null : ((GWP - terrorPremium) / deltaRiskSI) * 100;
-
-                        return (
-                            <tr key={idx}>
-                                <td>{idx + 1}</td>
-                                <td>{fmtNum(NOP)}</td>
-                                <td>{fmtNum(GWP)}</td>
-                                <td>{fmtNum(GIC)}</td>
-                                <td>{fmtNum(GEP)}</td>
-                                <td>{gicOverGep === null ? '-' : fmtNum(gicOverGep, { percent: true })}</td>
-                                <td>{fmtNum(NOC)}</td>
-                                <td>{avgRate === null ? '-' : fmtNum(avgRate, { percent: true })}</td>
+            <div className="table-wrapper">
+                <table className="data-table">
+                    <thead>
+                        <tr>
+                            <th className="sl-col">Sl. No</th>
+                            {tableKeys.map(key => (
+                                <th key={key}>
+                                    <div className="header-content">
+                                        <div className="sort-label" onClick={() => setSortConfig({key, direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc'})}>
+                                            {key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' : key}
+                                            <span>{sortConfig.key === key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}</span>
+                                        </div>
+                                        <select 
+                                            className="column-filter-select"
+                                            value={columnFilters[key]} 
+                                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                                        >
+                                            <option value="Select">Select</option>
+                                            {Array.from(new Set(processedData.map(i => String(i[key])))).sort().map(v => (
+                                                <option key={v} value={v}>{v}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginatedData.map((row, idx) => (
+                            <tr key={row.id} className={row.isSummary ? 'summary-row' : ''}>
+                                <td className="sl-col">
+                                    {row.isSummary ? '' : (currentPage - 1) * itemsPerPage + idx + 1}
+                                </td>
+                                <td className={row.isSummary ? 'summary-text' : 'segment-cell'}>{row.Segments}</td>
+                                <td className="num-cell">{fmtNum(row.NOP)}</td>
+                                <td className="num-cell">{fmtNum(row.GWP)}</td>
+                                <td className={`num-cell ${row.GIC < 0 ? 'negative-val' : ''}`}>{fmtNum(row.GIC)}</td>
+                                <td className="num-cell">{fmtNum(row.GEP)}</td>
+                                <td className="num-cell">{fmtNum(row.GicOverGep)}</td>
+                                <td className="num-cell">{fmtNum(row.NOC)}</td>
+                                <td className="num-cell">{fmtNum(row.AvgRate)}</td>
                             </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="pagination-container">
+                <div className="range-selector">
+                    <label>Show </label>
+                    <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="pagination-select">
+                        {[50, 100, 200].map(size => <option key={size} value={size}>{size}</option>)}
+                    </select>
+                    <span> records</span>
+                </div>
+                <div className="page-navigation">
+                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Previous</button>
+                    <span>Page {currentPage} of {totalPages || 1}</span>
+                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages || totalPages === 0}>Next</button>
+                </div>
+            </div>
         </div>
     );
 }
