@@ -3,43 +3,68 @@ import xl_data from '/src/data/xl_data.json';
 
 function Body() {
     const [data, setData] = useState([]);
-    const [selectedOccupancies, setSelectedOccupancies] = useState(['All']);
-    const [selectedOccupancyCodes, setSelectedOccupancyCodes] = useState(['All']);
-    
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [isCodeDropdownOpen, setIsCodeDropdownOpen] = useState(false);
-    const [occupancySearch, setOccupancySearch] = useState('');
-    const [occupancyCodeSearch, setOccupancyCodeSearch] = useState('');
-    const dropdownRef = useRef(null);
-    const codeDropdownRef = useRef(null);
+
+    // Combined occupancy selection state (multi-select like before)
+    const [selectedOccupancyCombined, setSelectedOccupancyCombined] = useState(['All']);
+    const [isCombinedDropdownOpen, setIsCombinedDropdownOpen] = useState(false);
+    const [combinedSearch, setCombinedSearch] = useState('');
+    const combinedDropdownRef = useRef(null);
+
+    // Period dropdown UI state (single-select custom dropdowns)
+    const [isFinDropdownOpen, setIsFinDropdownOpen] = useState(false);
+    const [isFromDropdownOpen, setIsFromDropdownOpen] = useState(false);
+    const [isToDropdownOpen, setIsToDropdownOpen] = useState(false);
+    const [finSearch, setFinSearch] = useState('');
+    const [fromSearch, setFromSearch] = useState('');
+    const [toSearch, setToSearch] = useState('');
+    const finDropdownRef = useRef(null);
+    const fromDropdownRef = useRef(null);
+    const toDropdownRef = useRef(null);
 
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-    
-    // 1. Default changed from 'All' to 'Select'
+
     const [columnFilters, setColumnFilters] = useState({
         Segments: 'Select', NOP: 'Select', GWP: 'Select', GIC: 'Select', GEP: 'Select', GicOverGep: 'Select', NOC: 'Select', AvgRate: 'Select'
     });
-    
+
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
 
-    // Period filter state (periodIndex numeric representation)
-    const [startPeriodIndex, setStartPeriodIndex] = useState(null);
-    const [endPeriodIndex, setEndPeriodIndex] = useState(null);
+    // Period filter state (financial year + from/to month)
+    const [selectedFinYear, setSelectedFinYear] = useState(null); // e.g., '2025-26'
+    const [fromMonth, setFromMonth] = useState(null); // month number 1..12
+    const [toMonth, setToMonth] = useState(null); // month number 1..12
+
+    // Column filter dropdown UI state: which column's filter menu is open (key) and per-column search text
+    const [openColumnFilterKey, setOpenColumnFilterKey] = useState(null);
+    const [columnFilterSearch, setColumnFilterSearch] = useState({}); // { key: 'search text' }
+    const columnFilterRefs = useRef({}); // refs for each column filter menu
 
     useEffect(() => {
         setData(Array.isArray(xl_data) ? xl_data : []);
         const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsDropdownOpen(false);
+            if (combinedDropdownRef.current && !combinedDropdownRef.current.contains(event.target)) {
+                setIsCombinedDropdownOpen(false);
             }
-            if (codeDropdownRef.current && !codeDropdownRef.current.contains(event.target)) {
-                setIsCodeDropdownOpen(false);
+            if (finDropdownRef.current && !finDropdownRef.current.contains(event.target)) {
+                setIsFinDropdownOpen(false);
+            }
+            if (fromDropdownRef.current && !fromDropdownRef.current.contains(event.target)) {
+                setIsFromDropdownOpen(false);
+            }
+            if (toDropdownRef.current && !toDropdownRef.current.contains(event.target)) {
+                setIsToDropdownOpen(false);
+            }
+            if (openColumnFilterKey) {
+                const ref = columnFilterRefs.current[openColumnFilterKey];
+                if (ref && !ref.contains(event.target)) {
+                    setOpenColumnFilterKey(null);
+                }
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+    }, [openColumnFilterKey]);
 
     const parseNumber = (val) => {
         if (val === null || val === undefined) return 0;
@@ -59,6 +84,17 @@ function Body() {
     };
 
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    // financial order April -> March
+    const finOrderMonths = [4,5,6,7,8,9,10,11,12,1,2,3];
+
+    const getCalendarYearForMonth = (finYearStart, monthNum) => {
+        if (monthNum >= 4 && monthNum <= 12) return finYearStart;
+        return finYearStart + 1;
+    };
+
+    const getPeriodIndex = (calendarYear, monthNum) => {
+        return calendarYear * 12 + (monthNum - 1);
+    };
 
     const processedData = useMemo(() => {
         return data.map((row, index) => {
@@ -69,7 +105,7 @@ function Body() {
             const NOC = parseNumber(row['Num claim registered']);
             const deltaRiskSI = parseNumber(row['Delta risk SI']);
 
-            // Parse "Financial (GWP)" which is like "04, 2025-26"
+            // Parse "Financial (GWP)" like "04, 2025-26"
             const finRaw = row['Financial (GWP)'] || '';
             let monthNum = null;
             let finYear = null;
@@ -83,7 +119,6 @@ function Body() {
                     if (!isNaN(m)) monthNum = m;
                     finYear = y || null;
                 } else {
-                    // fallback: sometimes might be "04 2025-26" or similar
                     const fallback = String(finRaw).trim().split(/\s+/);
                     if (fallback.length >= 2) {
                         const m = parseInt(fallback[0].replace(/[^0-9]/g, ''), 10);
@@ -93,38 +128,55 @@ function Body() {
                     }
                 }
                 if (monthNum !== null && finYear) {
-                    // derive numeric start year from financial year string "2025-26"
                     const startYear = parseInt(finYear.split('-')[0], 10);
                     if (!isNaN(startYear)) {
-                        // index to compare across years: (startYear * 12) + (monthNum - 1)
-                        periodIndex = startYear * 12 + (monthNum - 1);
+                        const calendarYear = getCalendarYearForMonth(startYear, monthNum);
+                        periodIndex = getPeriodIndex(calendarYear, monthNum);
                     }
                     const monthName = monthNames[(monthNum - 1)] || `M${monthNum}`;
                     periodLabel = `${monthName}, ${finYear}`;
                 }
             } catch (e) {
-                // leave defaults
+                // ignore
             }
+
+            const OccName = row['GC Occupancies Name'] || '(None)';
+            const OccCode = row['GC Occupancies'] || '(None)';
+            const combinedLabel = `${OccCode}-${OccName}`;
 
             return {
                 id: index,
                 Segments: row['UW Sub Channel'] || row['UW sub channel'] || '(None)',
-                OccupancyName: row['GC Occupancies Name'] || '(None)',
-                OccupancyCode: row['GC Occupancies'] || '(None)', // <-- use the actual JSON key
+                OccupancyName: OccName,
+                OccupancyCode: OccCode,
+                OccupancyCombined: combinedLabel,
                 NOP, GWP, GIC, GEP, NOC, deltaRiskSI,
                 GicOverGep: GEP === 0 ? 0 : (GIC / GEP),
                 AvgRate: deltaRiskSI === 0 ? 0 : (GWP / deltaRiskSI) * 1000,
                 isSummary: false,
-                // period parsing results
-                financialMonthNum: monthNum, // e.g., 4
-                financialYear: finYear,      // e.g., "2025-26"
-                periodIndex,                 // numeric comparable index
-                periodLabel                  // e.g., "April, 2025-26"
+                financialMonthNum: monthNum,
+                financialYear: finYear,
+                periodIndex,
+                periodLabel
             };
         });
     }, [data]);
 
-    // build period options from processedData
+    // Build list of available financial years from data (unique)
+    const financialYears = useMemo(() => {
+        const set = new Set();
+        processedData.forEach(item => {
+            if (item.financialYear) set.add(item.financialYear);
+        });
+        const arr = Array.from(set).sort((a, b) => {
+            const aStart = parseInt(a.split('-')[0], 10) || 0;
+            const bStart = parseInt(b.split('-')[0], 10) || 0;
+            return aStart - bStart;
+        });
+        return arr;
+    }, [processedData]);
+
+    // period options list (individual month-year labels) used by earlier UI
     const periodOptions = useMemo(() => {
         const map = new Map();
         processedData.forEach(item => {
@@ -134,88 +186,71 @@ function Body() {
                 }
             }
         });
-        // sort by numeric index asc
         const entries = Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
         return entries.map(([idx, label]) => ({ index: idx, label }));
     }, [processedData]);
 
-    // set default start/end periods when processedData changes
     useEffect(() => {
-        if (periodOptions.length > 0) {
-            const first = periodOptions[0].index;
-            const last = periodOptions[periodOptions.length - 1].index;
-            setStartPeriodIndex(prev => prev === null ? first : prev);
-            setEndPeriodIndex(prev => prev === null ? last : prev);
+        if (financialYears.length > 0) {
+            const latestFY = financialYears[financialYears.length - 1];
+            setSelectedFinYear(prev => prev === null ? latestFY : prev);
+            setFromMonth(prev => prev === null ? 4 : prev);
+            setToMonth(prev => prev === null ? 3 : prev);
         } else {
-            setStartPeriodIndex(null);
-            setEndPeriodIndex(null);
+            setSelectedFinYear(null);
+            setFromMonth(null);
+            setToMonth(null);
         }
-        // reset to page 1 when data periods change
         setCurrentPage(1);
-    }, [periodOptions]);
+    }, [financialYears]);
 
-    const occupancyOptions = useMemo(() => {
-        const uniqueValues = new Set(processedData.map(item => String(item.OccupancyName)));
-        return ['All', ...Array.from(uniqueValues).sort((a, b) => a.localeCompare(b))];
-    }, [processedData]);
-
-    const occupancyCodeOptions = useMemo(() => {
-        const uniqueValues = new Set(processedData.map(item => String(item.OccupancyCode)));
-        return ['All', ...Array.from(uniqueValues).sort((a, b) => a.localeCompare(b))];
-    }, [processedData]);
-
-    const filteredOccupancyOptions = occupancyOptions.filter(opt =>
-        opt.toLowerCase().includes(occupancySearch.toLowerCase())
-    );
-
-    const filteredOccupancyCodeOptions = occupancyCodeOptions.filter(opt =>
-        opt.toLowerCase().includes(occupancyCodeSearch.toLowerCase())
-    );
-
-    // Main logic: apply occupancy name & occupancy code filters, then period filter, then column filters, then group by segment
-    const filteredData = useMemo(() => {
-        // Step A: Apply occupancy name filter
-        const nameFiltered = selectedOccupancies.includes('All')
-            ? processedData
-            : processedData.filter(row => selectedOccupancies.includes(row.OccupancyName));
-
-        // Step B: Apply occupancy code filter
-        const codeFiltered = selectedOccupancyCodes.includes('All')
-            ? nameFiltered
-            : nameFiltered.filter(row => selectedOccupancyCodes.includes(row.OccupancyCode));
-
-        // Step C: Apply period range filter (if both start & end are set)
-        let periodFiltered = codeFiltered;
-        if (startPeriodIndex !== null && endPeriodIndex !== null) {
-            const lower = Math.min(startPeriodIndex, endPeriodIndex);
-            const upper = Math.max(startPeriodIndex, endPeriodIndex);
-            periodFiltered = codeFiltered.filter(row => {
-                return typeof row.periodIndex === 'number' && row.periodIndex >= lower && row.periodIndex <= upper;
-            });
-        }
-
-        // Step D: Apply column filters
-        const columnFiltered = periodFiltered.filter(row => {
-            return Object.keys(columnFilters).every(key => {
-                if (columnFilters[key] === 'Select') return true;
-                return String(row[key]) === columnFilters[key];
-            });
+    const combinedOccupancyOptions = useMemo(() => {
+        const set = new Set();
+        processedData.forEach(item => {
+            if (item.OccupancyCombined) set.add(item.OccupancyCombined);
         });
+        return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    }, [processedData]);
 
-        // Step E: Group by segment and sum all values
+    const filteredCombinedOptions = combinedOccupancyOptions.filter(opt =>
+        opt.toLowerCase().includes(combinedSearch.toLowerCase())
+    );
+
+    // preColumnFilteredData: occupancy + period applied (but not column filters)
+    const preColumnFilteredData = useMemo(() => {
+        const occupancyFiltered = selectedOccupancyCombined.includes('All')
+            ? processedData
+            : processedData.filter(row => selectedOccupancyCombined.includes(row.OccupancyCombined));
+
+        let periodFiltered = occupancyFiltered;
+        if (selectedFinYear && fromMonth !== null && toMonth !== null) {
+            const startYear = parseInt(selectedFinYear.split('-')[0], 10);
+            if (!isNaN(startYear)) {
+                const startIdx = getPeriodIndex(getCalendarYearForMonth(startYear, fromMonth), fromMonth);
+                const endIdx = getPeriodIndex(getCalendarYearForMonth(startYear, toMonth), toMonth);
+                const lower = Math.min(startIdx, endIdx);
+                const upper = Math.max(startIdx, endIdx);
+                periodFiltered = occupancyFiltered.filter(row => {
+                    return typeof row.periodIndex === 'number' && row.periodIndex >= lower && row.periodIndex <= upper;
+                });
+            }
+        }
+        return periodFiltered;
+    }, [processedData, selectedOccupancyCombined, selectedFinYear, fromMonth, toMonth]);
+
+    // groupedDataFromPreColumn: aggregated groups (the actual values visible in the table before applying column filters)
+    const groupedDataFromPreColumn = useMemo(() => {
         const groups = {};
-        columnFiltered.forEach(row => {
+        preColumnFilteredData.forEach(row => {
             if (!groups[row.Segments]) {
                 groups[row.Segments] = {
-                    id: row.Segments,
                     Segments: row.Segments,
                     NOP: 0,
                     GWP: 0,
                     GIC: 0,
                     GEP: 0,
                     NOC: 0,
-                    deltaRiskSI: 0,
-                    isSummary: false
+                    deltaRiskSI: 0
                 };
             }
             groups[row.Segments].NOP += row.NOP;
@@ -225,28 +260,65 @@ function Body() {
             groups[row.Segments].NOC += row.NOC;
             groups[row.Segments].deltaRiskSI += row.deltaRiskSI;
         });
-
-        // Step F: Calculate GIC/GEP and AvgRate for each segment
-        const result = Object.keys(groups).sort().map(segment => {
-            const group = groups[segment];
+        return Object.keys(groups).sort().map(segment => {
+            const g = groups[segment];
             return {
-                ...group,
-                GicOverGep: group.GEP === 0 ? 0 : (group.GIC / group.GEP),
-                AvgRate: group.deltaRiskSI === 0 ? 0 : (group.GWP / group.deltaRiskSI) * 1000
+                ...g,
+                GicOverGep: g.GEP === 0 ? 0 : (g.GIC / g.GEP),
+                AvgRate: g.deltaRiskSI === 0 ? 0 : (g.GWP / g.deltaRiskSI) * 1000
             };
         });
+    }, [preColumnFilteredData]);
 
-        return result;
-    }, [processedData, selectedOccupancies, selectedOccupancyCodes, columnFilters, startPeriodIndex, endPeriodIndex]);
+    // Main filteredData: apply column filters on groupedDataFromPreColumn (so column filter options reflect actual table values)
+    const filteredData = useMemo(() => {
+        let items = groupedDataFromPreColumn.slice();
+
+        // Apply columnFilters to grouped rows
+        items = items.filter(row => {
+            return Object.keys(columnFilters).every(key => {
+                if (columnFilters[key] === 'Select') return true;
+                const rowVal = row[key];
+                const filterVal = columnFilters[key];
+                const rowNum = parseFloat(String(rowVal).replace(/,/g, ''));
+                const filterNum = parseFloat(String(filterVal).replace(/,/g, ''));
+                if (!Number.isNaN(rowNum) && !Number.isNaN(filterNum)) {
+                    return rowNum === filterNum;
+                }
+                return String(rowVal) === String(filterVal);
+            });
+        });
+
+        // Preserve isSummary flag false for aggregated rows
+        return items.map((r, i) => ({ ...r, id: i, isSummary: false }));
+    }, [groupedDataFromPreColumn, columnFilters]);
+
+    // Build column filter options from groupedDataFromPreColumn (so they show values visible in table even before occupancy selection)
+    const columnFilterOptions = useMemo(() => {
+        const keys = ['Segments', 'NOP', 'GWP', 'GIC', 'GEP', 'GicOverGep', 'NOC', 'AvgRate'];
+        const options = {};
+        keys.forEach(key => {
+            const set = new Set();
+            groupedDataFromPreColumn.forEach(row => {
+                const value = row[key];
+                set.add(String(value));
+            });
+            const arr = Array.from(set);
+            arr.sort((a, b) => {
+                const an = parseFloat(a);
+                const bn = parseFloat(b);
+                if (!Number.isNaN(an) && !Number.isNaN(bn)) return an - bn;
+                return a.localeCompare(b);
+            });
+            options[key] = arr;
+        });
+        return options;
+    }, [groupedDataFromPreColumn]);
 
     const sortedData = useMemo(() => {
         let sortableItems = [...filteredData];
         if (sortConfig.key !== null) {
             sortableItems.sort((a, b) => {
-                if (a.isSummary && b.isSummary) return 0;
-                if (a.isSummary) return 1; 
-                if (b.isSummary) return -1;
-
                 if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
                 if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
@@ -263,83 +335,60 @@ function Body() {
 
     const tableKeys = ['Segments', 'NOP', 'GWP', 'GIC', 'GEP', 'GicOverGep', 'NOC', 'AvgRate'];
 
+    // Selected period parts for display (centered, spaced)
+    const selectedPeriodParts = useMemo(() => {
+        if (!selectedFinYear || fromMonth === null || toMonth === null) return ['All periods'];
+        const startYear = parseInt(selectedFinYear.split('-')[0], 10);
+        if (isNaN(startYear)) return ['All periods'];
+        const startIdx = getPeriodIndex(getCalendarYearForMonth(startYear, fromMonth), fromMonth);
+        const endIdx = getPeriodIndex(getCalendarYearForMonth(startYear, toMonth), toMonth);
+        const lower = Math.min(startIdx, endIdx);
+        const upper = Math.max(startIdx, endIdx);
+        const lowerMonth = (lower % 12) + 1;
+        const upperMonth = (upper % 12) + 1;
+        const lowerLabel = `${monthNames[lowerMonth - 1]}, ${selectedFinYear}`;
+        const upperLabel = `${monthNames[upperMonth - 1]}, ${selectedFinYear}`;
+        if (lower === upper) return [lowerLabel];
+        return [lowerLabel, upperLabel];
+    }, [selectedFinYear, fromMonth, toMonth]);
+
+    // helpers for period dropdown searches
+    const filteredFinYears = financialYears.filter(fy => fy.toLowerCase().includes(finSearch.toLowerCase()));
+    const filteredFromMonths = finOrderMonths.filter(m => monthNames[m-1].toLowerCase().includes(fromSearch.toLowerCase()));
+    const filteredToMonths = finOrderMonths.filter(m => monthNames[m-1].toLowerCase().includes(toSearch.toLowerCase()));
+
+    const getColumnFilterOptionsForKey = (key) => {
+        const options = columnFilterOptions[key] || [];
+        const q = (columnFilterSearch[key] || '').toLowerCase().trim();
+        if (!q) return options;
+        return options.filter(o => String(o).toLowerCase().includes(q));
+    };
+
     return (
         <div className="dashboard-container">
-            <div className="filter-section" style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                {/* Period range filter */}
+            <div className="filter-section" style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {/* Period filter: Financial Year, From Month, To Month (custom dropdowns) */}
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label className="filter-label">PERIOD RANGE:</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <select
-                            value={startPeriodIndex !== null ? startPeriodIndex : ''}
-                            onChange={(e) => {
-                                const v = e.target.value === '' ? null : Number(e.target.value);
-                                setStartPeriodIndex(v);
-                                setCurrentPage(1);
-                            }}
-                        >
-                            {periodOptions.map(opt => (
-                                <option key={opt.index} value={opt.index}>{opt.label}</option>
-                            ))}
-                        </select>
-                        <span style={{ alignSelf: 'center' }}>to</span>
-                        <select
-                            value={endPeriodIndex !== null ? endPeriodIndex : ''}
-                            onChange={(e) => {
-                                const v = e.target.value === '' ? null : Number(e.target.value);
-                                setEndPeriodIndex(v);
-                                setCurrentPage(1);
-                            }}
-                        >
-                            {periodOptions.map(opt => (
-                                <option key={opt.index} value={opt.index}>{opt.label}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label className="filter-label">OCCUPANCY:</label>
-                    <div className="custom-dropdown" ref={dropdownRef}>
-                        <div className="dropdown-selected" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-                            {selectedOccupancies.length === 0 ? 'Select...' : selectedOccupancies.length === occupancyOptions.length ? 'All Selected' : `${selectedOccupancies.length} selected`}
-                            <span className="arrow">{isDropdownOpen ? '▲' : '▼'}</span>
+                    <label className="filter-label">FINANCIAL YEAR:</label>
+                    <div className="custom-dropdown" ref={finDropdownRef}>
+                        <div className="dropdown-selected" onClick={() => setIsFinDropdownOpen(prev => !prev)}>
+                            {selectedFinYear ? selectedFinYear : 'Select...'}
+                            <span className="arrow">{isFinDropdownOpen ? 'â–²' : 'â–¼'}</span>
                         </div>
-                        {isDropdownOpen && (
+                        {isFinDropdownOpen && (
                             <div className="dropdown-menu">
-                                <input 
-                                    type="text" 
-                                    className="dropdown-search" 
-                                    placeholder="Search occupancy..." 
-                                    value={occupancySearch}
-                                    onChange={(e) => setOccupancySearch(e.target.value)}
-                                    autoFocus
-                                />
+                                <input type="text" className="dropdown-search" placeholder="Search financial year..." value={finSearch} onChange={(e)=>setFinSearch(e.target.value)} autoFocus />
                                 <div className="dropdown-options">
-                                    {filteredOccupancyOptions.map(opt => {
-                                        const isSelected = selectedOccupancies.includes(opt);
+                                    {filteredFinYears.map(fy => {
+                                        const isSelected = selectedFinYear === fy;
                                         return (
-                                            <div 
-                                                key={opt} 
-                                                className={`dropdown-item ${isSelected ? 'active' : ''} ${opt === 'All' ? 'all-option' : ''}`}
-                                                onClick={() => {
-                                                    if (opt === 'All') {
-                                                        setSelectedOccupancies(isSelected ? [] : ['All']);
-                                                    } else {
-                                                        let updated;
-                                                        if (isSelected) {
-                                                            updated = selectedOccupancies.filter(item => item !== opt && item !== 'All');
-                                                        } else {
-                                                            updated = selectedOccupancies.filter(item => item !== 'All');
-                                                            updated.push(opt);
-                                                        }
-                                                        setSelectedOccupancies(updated.length === 0 ? ['All'] : updated);
-                                                    }
-                                                }}
-                                            >
-                                                <input type="checkbox" checked={isSelected} readOnly style={{ marginRight: 8 }} />
-                                                {opt}
-                                            </div>
+                                            <div key={fy} className={`dropdown-item ${isSelected ? 'active' : ''}`} onClick={()=>{
+                                                setSelectedFinYear(fy);
+                                                setFromMonth(4);
+                                                setToMonth(3);
+                                                setIsFinDropdownOpen(false);
+                                                setCurrentPage(1);
+                                            }}>{fy}</div>
                                         );
                                     })}
                                 </div>
@@ -349,44 +398,87 @@ function Body() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <label className="filter-label">OCCUPANCY CODE:</label>
-                    <div className="custom-dropdown" ref={codeDropdownRef}>
-                        <div className="dropdown-selected" onClick={() => setIsCodeDropdownOpen(!isCodeDropdownOpen)}>
-                            {selectedOccupancyCodes.length === 0 ? 'Select...' : selectedOccupancyCodes.length === occupancyCodeOptions.length ? 'All Selected' : `${selectedOccupancyCodes.length} selected`}
-                            <span className="arrow">{isCodeDropdownOpen ? '▲' : '▼'}</span>
+                    <label className="filter-label">FROM MONTH:</label>
+                    <div className="custom-dropdown" ref={fromDropdownRef}>
+                        <div className="dropdown-selected" onClick={() => setIsFromDropdownOpen(prev => !prev)}>
+                            {fromMonth ? monthNames[fromMonth - 1] : 'Select...'}
+                            <span className="arrow">{isFromDropdownOpen ? 'â–²' : 'â–¼'}</span>
                         </div>
-                        {isCodeDropdownOpen && (
+                        {isFromDropdownOpen && (
                             <div className="dropdown-menu">
-                                <input 
-                                    type="text" 
-                                    className="dropdown-search" 
-                                    placeholder="Search occupancy code..." 
-                                    value={occupancyCodeSearch}
-                                    onChange={(e) => setOccupancyCodeSearch(e.target.value)}
-                                    autoFocus
-                                />
+                                <input type="text" className="dropdown-search" placeholder="Search month..." value={fromSearch} onChange={(e)=>setFromSearch(e.target.value)} autoFocus />
                                 <div className="dropdown-options">
-                                    {filteredOccupancyCodeOptions.map(opt => {
-                                        const isSelected = selectedOccupancyCodes.includes(opt);
+                                    {filteredFromMonths.map(m => {
+                                        const label = monthNames[m-1];
+                                        const isSelected = fromMonth === m;
+                                        return <div key={`from-${m}`} className={`dropdown-item ${isSelected ? 'active' : ''}`} onClick={()=>{
+                                            setFromMonth(m);
+                                            setIsFromDropdownOpen(false);
+                                            setCurrentPage(1);
+                                        }}>{label}</div>;
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label className="filter-label">TO MONTH:</label>
+                    <div className="custom-dropdown" ref={toDropdownRef}>
+                        <div className="dropdown-selected" onClick={() => setIsToDropdownOpen(prev => !prev)}>
+                            {toMonth ? monthNames[toMonth - 1] : 'Select...'}
+                            <span className="arrow">{isToDropdownOpen ? 'â–²' : 'â–¼'}</span>
+                        </div>
+                        {isToDropdownOpen && (
+                            <div className="dropdown-menu">
+                                <input type="text" className="dropdown-search" placeholder="Search month..." value={toSearch} onChange={(e)=>setToSearch(e.target.value)} autoFocus />
+                                <div className="dropdown-options">
+                                    {filteredToMonths.map(m => {
+                                        const label = monthNames[m-1];
+                                        const isSelected = toMonth === m;
+                                        return <div key={`to-${m}`} className={`dropdown-item ${isSelected ? 'active' : ''}`} onClick={()=>{
+                                            setToMonth(m);
+                                            setIsToDropdownOpen(false);
+                                            setCurrentPage(1);
+                                        }}>{label}</div>;
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Combined Occupancy dropdown */}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label className="filter-label">OCCUPANCY (CODE - NAME):</label>
+                    <div className="custom-dropdown" ref={combinedDropdownRef}>
+                        <div className="dropdown-selected" onClick={() => setIsCombinedDropdownOpen(prev => !prev)}>
+                            {selectedOccupancyCombined.length === 0 ? 'Select...' : selectedOccupancyCombined.length === combinedOccupancyOptions.length ? 'All Selected' : `${selectedOccupancyCombined.length} selected`}
+                            <span className="arrow">{isCombinedDropdownOpen ? 'â–²' : 'â–¼'}</span>
+                        </div>
+                        {isCombinedDropdownOpen && (
+                            <div className="dropdown-menu">
+                                <input type="text" className="dropdown-search" placeholder="Search occupancy..." value={combinedSearch} onChange={(e)=>setCombinedSearch(e.target.value)} autoFocus />
+                                <div className="dropdown-options">
+                                    {filteredCombinedOptions.map(opt => {
+                                        const isSelected = selectedOccupancyCombined.includes(opt);
                                         return (
-                                            <div 
-                                                key={opt} 
-                                                className={`dropdown-item ${isSelected ? 'active' : ''} ${opt === 'All' ? 'all-option' : ''}`}
-                                                onClick={() => {
-                                                    if (opt === 'All') {
-                                                        setSelectedOccupancyCodes(isSelected ? [] : ['All']);
+                                            <div key={opt} className={`dropdown-item ${isSelected ? 'active' : ''} ${opt === 'All' ? 'all-option' : ''}`} onClick={()=>{
+                                                if (opt === 'All') {
+                                                    setSelectedOccupancyCombined(isSelected ? [] : ['All']);
+                                                } else {
+                                                    let updated;
+                                                    if (isSelected) {
+                                                        updated = selectedOccupancyCombined.filter(item => item !== opt && item !== 'All');
                                                     } else {
-                                                        let updated;
-                                                        if (isSelected) {
-                                                            updated = selectedOccupancyCodes.filter(item => item !== opt && item !== 'All');
-                                                        } else {
-                                                            updated = selectedOccupancyCodes.filter(item => item !== 'All');
-                                                            updated.push(opt);
-                                                        }
-                                                        setSelectedOccupancyCodes(updated.length === 0 ? ['All'] : updated);
+                                                        updated = selectedOccupancyCombined.filter(item => item !== 'All');
+                                                        updated.push(opt);
                                                     }
-                    }}
-                                            >
+                                                    setSelectedOccupancyCombined(updated.length === 0 ? ['All'] : updated);
+                                                }
+                                                setCurrentPage(1);
+                                            }}>
                                                 <input type="checkbox" checked={isSelected} readOnly style={{ marginRight: 8 }} />
                                                 {opt}
                                             </div>
@@ -399,6 +491,20 @@ function Body() {
                 </div>
             </div>
 
+            {/* Selected period info centered above table */}
+            <div style={{ marginTop: 12, marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                <div className="selected-period-container">
+                    {selectedPeriodParts.length === 1 ? (
+                        <div className="period-item">{selectedPeriodParts[0]}</div>
+                    ) : (
+                        <>
+                            <div className="period-item">{selectedPeriodParts[0]}</div>
+                            <div className="period-item">{selectedPeriodParts[1]}</div>
+                        </>
+                    )}
+                </div>
+            </div>
+
             <div className="table-wrapper">
                 <table className="data-table">
                     <thead>
@@ -406,21 +512,87 @@ function Body() {
                             <th className="sl-col">Sl. No</th>
                             {tableKeys.map(key => (
                                 <th key={key}>
-                                    <div className="header-content">
-                                        <div className="sort-label" onClick={() => setSortConfig({key, direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc'})}>
-                                            {key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' : key}
-                                            <span>{sortConfig.key === key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}</span>
+                                    <div className="header-content" style={{ position: 'relative' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div
+                                                className="sort-label"
+                                                onClick={() => setSortConfig({key, direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc'})}
+                                                style={{ cursor: 'pointer', userSelect: 'none' }}
+                                            >
+                                                {key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' : key}
+                                                <span style={{ marginLeft: 8 }}>{sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'â–²' : 'â–¼') : 'â†•'}</span>
+                                            </div>
+
+                                            {/* Filter icon button (more visible, white icon on blue background) */}
+                                            <div style={{ marginLeft: 8, position: 'relative' }} ref={el => { columnFilterRefs.current[key] = el; }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setOpenColumnFilterKey(prev => prev === key ? null : key);
+                                                        setColumnFilterSearch(prev => ({ ...prev, [key]: prev[key] || '' }));
+                                                    }}
+                                                    title="Filter"
+                                                    className="filter-icon-btn"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                                                        <path d="M3 5h18" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                        <path d="M6 12h12" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                        <path d="M10 19h4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    </svg>
+                                                </button>
+
+                                                {/* Column filter menu (search + options) */}
+                                                {openColumnFilterKey === key && (
+                                                    <div
+                                                        ref={el => { columnFilterRefs.current[key] = el || columnFilterRefs.current[key]; }}
+                                                        className="dropdown-menu"
+                                                        style={{ width: 300, right: 0, left: 'auto', top: '110%' }}
+                                                    >
+                                                        <input
+                                                            type="text"
+                                                            className="dropdown-search"
+                                                            placeholder="Search..."
+                                                            value={columnFilterSearch[key] || ''}
+                                                            onChange={(e) => setColumnFilterSearch(prev => ({ ...prev, [key]: e.target.value }))}
+                                                            autoFocus
+                                                        />
+                                                        <div className="dropdown-options">
+                                                            <div
+                                                                className={`dropdown-item ${columnFilters[key] === 'Select' ? 'active' : ''} all-option`}
+                                                                onClick={() => {
+                                                                    setColumnFilters(prev => ({ ...prev, [key]: 'Select' }));
+                                                                    setOpenColumnFilterKey(null);
+                                                                }}
+                                                            >
+                                                                Clear filter
+                                                            </div>
+
+                                                            {getColumnFilterOptionsForKey(key).length === 0 && (
+                                                                <div className="no-results">No options</div>
+                                                            )}
+
+                                                            {getColumnFilterOptionsForKey(key).map(opt => {
+                                                                const isActive = String(columnFilters[key]) === String(opt);
+                                                                return (
+                                                                    <div
+                                                                        key={opt}
+                                                                        className={`dropdown-item ${isActive ? 'active' : ''}`}
+                                                                        onClick={() => {
+                                                                            setColumnFilters(prev => ({ ...prev, [key]: opt }));
+                                                                            setOpenColumnFilterKey(null);
+                                                                        }}
+                                                                    >
+                                                                        {opt}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <select 
-                                            className="column-filter-select"
-                                            value={columnFilters[key]} 
-                                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [key]: e.target.value }))}
-                                        >
-                                            <option value="Select">Select</option>
-                                            {Array.from(new Set(processedData.map(i => String(i[key])))).sort().map(v => (
-                                                <option key={v} value={v}>{v}</option>
-                                            ))}
-                                        </select>
+
                                     </div>
                                 </th>
                             ))}
