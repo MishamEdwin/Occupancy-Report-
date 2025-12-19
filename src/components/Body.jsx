@@ -385,4 +385,83 @@ function Body() {
                                                         }
                                                         setSelectedOccupancyCodes(updated.length === 0 ? ['All'] : updated);
                                                     }
-                    
+                    }}
+                                            >
+                                                <input type="checkbox" checked={isSelected} readOnly style={{ marginRight: 8 }} />
+                                                {opt}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="table-wrapper">
+                <table className="data-table">
+                    <thead>
+                        <tr>
+                            <th className="sl-col">Sl. No</th>
+                            {tableKeys.map(key => (
+                                <th key={key}>
+                                    <div className="header-content">
+                                        <div className="sort-label" onClick={() => setSortConfig({key, direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc'})}>
+                                            {key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' : key}
+                                            <span>{sortConfig.key === key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}</span>
+                                        </div>
+                                        <select 
+                                            className="column-filter-select"
+                                            value={columnFilters[key]} 
+                                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                                        >
+                                            <option value="Select">Select</option>
+                                            {Array.from(new Set(processedData.map(i => String(i[key])))).sort().map(v => (
+                                                <option key={v} value={v}>{v}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginatedData.map((row, idx) => (
+                            <tr key={row.id} className={row.isSummary ? 'summary-row' : ''}>
+                                <td className="sl-col">
+                                    {row.isSummary ? '' : (currentPage - 1) * itemsPerPage + idx + 1}
+                                </td>
+                                <td className={row.isSummary ? 'summary-text' : 'segment-cell'}>{row.Segments}</td>
+                                <td className="num-cell">{fmtNum(row.NOP)}</td>
+                                <td className="num-cell">{fmtNum(row.GWP)}</td>
+                                <td className={`num-cell ${row.GIC < 0 ? 'negative-val' : ''}`}>{fmtNum(row.GIC)}</td>
+                                <td className="num-cell">{fmtNum(row.GEP)}</td>
+                                <td className="num-cell">{fmtNum(row.GicOverGep)}</td>
+                                <td className="num-cell">{fmtNum(row.NOC)}</td>
+                                <td className="num-cell">{fmtNum(row.AvgRate)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="pagination-container">
+                <div className="range-selector">
+                    <label>Show </label>
+                    <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="pagination-select">
+                        {[50, 100, 200].map(size => <option key={size} value={size}>{size}</option>)}
+                    </select>
+                    <span> records</span>
+                </div>
+                <div className="page-navigation">
+                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Previous</button>
+                    <span>Page {currentPage} of {totalPages || 1}</span>
+                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages || totalPages === 0}>Next</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default Body;
