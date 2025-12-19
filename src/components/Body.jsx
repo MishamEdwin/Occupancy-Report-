@@ -23,6 +23,10 @@ function Body() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
 
+    // Period filter state (periodIndex numeric representation)
+    const [startPeriodIndex, setStartPeriodIndex] = useState(null);
+    const [endPeriodIndex, setEndPeriodIndex] = useState(null);
+
     useEffect(() => {
         setData(Array.isArray(xl_data) ? xl_data : []);
         const handleClickOutside = (event) => {
@@ -54,6 +58,8 @@ function Body() {
         return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '-';
     };
 
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
     const processedData = useMemo(() => {
         return data.map((row, index) => {
             const GWP = parseNumber(row['Prem']);
@@ -62,6 +68,44 @@ function Body() {
             const GEP = parseNumber(row['Earned Prem']);
             const NOC = parseNumber(row['Num claim registered']);
             const deltaRiskSI = parseNumber(row['Delta risk SI']);
+
+            // Parse "Financial (GWP)" which is like "04, 2025-26"
+            const finRaw = row['Financial (GWP)'] || '';
+            let monthNum = null;
+            let finYear = null;
+            let periodIndex = null;
+            let periodLabel = '(None)';
+            try {
+                const parts = String(finRaw).split(',');
+                if (parts.length >= 2) {
+                    const m = parseInt(parts[0].trim(), 10);
+                    const y = parts[1].trim();
+                    if (!isNaN(m)) monthNum = m;
+                    finYear = y || null;
+                } else {
+                    // fallback: sometimes might be "04 2025-26" or similar
+                    const fallback = String(finRaw).trim().split(/\s+/);
+                    if (fallback.length >= 2) {
+                        const m = parseInt(fallback[0].replace(/[^0-9]/g, ''), 10);
+                        const y = fallback[1].trim();
+                        if (!isNaN(m)) monthNum = m;
+                        finYear = y || null;
+                    }
+                }
+                if (monthNum !== null && finYear) {
+                    // derive numeric start year from financial year string "2025-26"
+                    const startYear = parseInt(finYear.split('-')[0], 10);
+                    if (!isNaN(startYear)) {
+                        // index to compare across years: (startYear * 12) + (monthNum - 1)
+                        periodIndex = startYear * 12 + (monthNum - 1);
+                    }
+                    const monthName = monthNames[(monthNum - 1)] || `M${monthNum}`;
+                    periodLabel = `${monthName}, ${finYear}`;
+                }
+            } catch (e) {
+                // leave defaults
+            }
+
             return {
                 id: index,
                 Segments: row['UW Sub Channel'] || row['UW sub channel'] || '(None)',
@@ -70,10 +114,45 @@ function Body() {
                 NOP, GWP, GIC, GEP, NOC, deltaRiskSI,
                 GicOverGep: GEP === 0 ? 0 : (GIC / GEP),
                 AvgRate: deltaRiskSI === 0 ? 0 : (GWP / deltaRiskSI) * 1000,
-                isSummary: false
+                isSummary: false,
+                // period parsing results
+                financialMonthNum: monthNum, // e.g., 4
+                financialYear: finYear,      // e.g., "2025-26"
+                periodIndex,                 // numeric comparable index
+                periodLabel                  // e.g., "April, 2025-26"
             };
         });
     }, [data]);
+
+    // build period options from processedData
+    const periodOptions = useMemo(() => {
+        const map = new Map();
+        processedData.forEach(item => {
+            if (typeof item.periodIndex === 'number' && item.periodLabel) {
+                if (!map.has(item.periodIndex)) {
+                    map.set(item.periodIndex, item.periodLabel);
+                }
+            }
+        });
+        // sort by numeric index asc
+        const entries = Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+        return entries.map(([idx, label]) => ({ index: idx, label }));
+    }, [processedData]);
+
+    // set default start/end periods when processedData changes
+    useEffect(() => {
+        if (periodOptions.length > 0) {
+            const first = periodOptions[0].index;
+            const last = periodOptions[periodOptions.length - 1].index;
+            setStartPeriodIndex(prev => prev === null ? first : prev);
+            setEndPeriodIndex(prev => prev === null ? last : prev);
+        } else {
+            setStartPeriodIndex(null);
+            setEndPeriodIndex(null);
+        }
+        // reset to page 1 when data periods change
+        setCurrentPage(1);
+    }, [periodOptions]);
 
     const occupancyOptions = useMemo(() => {
         const uniqueValues = new Set(processedData.map(item => String(item.OccupancyName)));
@@ -93,7 +172,7 @@ function Body() {
         opt.toLowerCase().includes(occupancyCodeSearch.toLowerCase())
     );
 
-    // Main logic: apply occupancy name & occupancy code filters, then column filters, then group by segment
+    // Main logic: apply occupancy name & occupancy code filters, then period filter, then column filters, then group by segment
     const filteredData = useMemo(() => {
         // Step A: Apply occupancy name filter
         const nameFiltered = selectedOccupancies.includes('All')
@@ -105,15 +184,25 @@ function Body() {
             ? nameFiltered
             : nameFiltered.filter(row => selectedOccupancyCodes.includes(row.OccupancyCode));
 
-        // Step C: Apply column filters
-        const columnFiltered = codeFiltered.filter(row => {
+        // Step C: Apply period range filter (if both start & end are set)
+        let periodFiltered = codeFiltered;
+        if (startPeriodIndex !== null && endPeriodIndex !== null) {
+            const lower = Math.min(startPeriodIndex, endPeriodIndex);
+            const upper = Math.max(startPeriodIndex, endPeriodIndex);
+            periodFiltered = codeFiltered.filter(row => {
+                return typeof row.periodIndex === 'number' && row.periodIndex >= lower && row.periodIndex <= upper;
+            });
+        }
+
+        // Step D: Apply column filters
+        const columnFiltered = periodFiltered.filter(row => {
             return Object.keys(columnFilters).every(key => {
                 if (columnFilters[key] === 'Select') return true;
                 return String(row[key]) === columnFilters[key];
             });
         });
 
-        // Step D: Group by segment and sum all values
+        // Step E: Group by segment and sum all values
         const groups = {};
         columnFiltered.forEach(row => {
             if (!groups[row.Segments]) {
@@ -137,7 +226,7 @@ function Body() {
             groups[row.Segments].deltaRiskSI += row.deltaRiskSI;
         });
 
-        // Step E: Calculate GIC/GEP and AvgRate for each segment
+        // Step F: Calculate GIC/GEP and AvgRate for each segment
         const result = Object.keys(groups).sort().map(segment => {
             const group = groups[segment];
             return {
@@ -148,7 +237,7 @@ function Body() {
         });
 
         return result;
-    }, [processedData, selectedOccupancies, selectedOccupancyCodes, columnFilters]);
+    }, [processedData, selectedOccupancies, selectedOccupancyCodes, columnFilters, startPeriodIndex, endPeriodIndex]);
 
     const sortedData = useMemo(() => {
         let sortableItems = [...filteredData];
@@ -177,6 +266,38 @@ function Body() {
     return (
         <div className="dashboard-container">
             <div className="filter-section" style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                {/* Period range filter */}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label className="filter-label">PERIOD RANGE:</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <select
+                            value={startPeriodIndex !== null ? startPeriodIndex : ''}
+                            onChange={(e) => {
+                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                setStartPeriodIndex(v);
+                                setCurrentPage(1);
+                            }}
+                        >
+                            {periodOptions.map(opt => (
+                                <option key={opt.index} value={opt.index}>{opt.label}</option>
+                            ))}
+                        </select>
+                        <span style={{ alignSelf: 'center' }}>to</span>
+                        <select
+                            value={endPeriodIndex !== null ? endPeriodIndex : ''}
+                            onChange={(e) => {
+                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                setEndPeriodIndex(v);
+                                setCurrentPage(1);
+                            }}
+                        >
+                            {periodOptions.map(opt => (
+                                <option key={opt.index} value={opt.index}>{opt.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label className="filter-label">OCCUPANCY:</label>
                     <div className="custom-dropdown" ref={dropdownRef}>
@@ -264,83 +385,4 @@ function Body() {
                                                         }
                                                         setSelectedOccupancyCodes(updated.length === 0 ? ['All'] : updated);
                                                     }
-                                                }}
-                                            >
-                                                <input type="checkbox" checked={isSelected} readOnly style={{ marginRight: 8 }} />
-                                                {opt}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            <div className="table-wrapper">
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th className="sl-col">Sl. No</th>
-                            {tableKeys.map(key => (
-                                <th key={key}>
-                                    <div className="header-content">
-                                        <div className="sort-label" onClick={() => setSortConfig({key, direction: sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc'})}>
-                                            {key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' : key}
-                                            <span>{sortConfig.key === key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}</span>
-                                        </div>
-                                        <select 
-                                            className="column-filter-select"
-                                            value={columnFilters[key]} 
-                                            onChange={(e) => setColumnFilters(prev => ({ ...prev, [key]: e.target.value }))}
-                                        >
-                                            <option value="Select">Select</option>
-                                            {Array.from(new Set(processedData.map(i => String(i[key])))).sort().map(v => (
-                                                <option key={v} value={v}>{v}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {paginatedData.map((row, idx) => (
-                            <tr key={row.id} className={row.isSummary ? 'summary-row' : ''}>
-                                <td className="sl-col">
-                                    {row.isSummary ? '' : (currentPage - 1) * itemsPerPage + idx + 1}
-                                </td>
-                                <td className={row.isSummary ? 'summary-text' : 'segment-cell'}>{row.Segments}</td>
-                                <td className="num-cell">{fmtNum(row.NOP)}</td>
-                                <td className="num-cell">{fmtNum(row.GWP)}</td>
-                                <td className={`num-cell ${row.GIC < 0 ? 'negative-val' : ''}`}>{fmtNum(row.GIC)}</td>
-                                <td className="num-cell">{fmtNum(row.GEP)}</td>
-                                <td className="num-cell">{fmtNum(row.GicOverGep)}</td>
-                                <td className="num-cell">{fmtNum(row.NOC)}</td>
-                                <td className="num-cell">{fmtNum(row.AvgRate)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            <div className="pagination-container">
-                <div className="range-selector">
-                    <label>Show </label>
-                    <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="pagination-select">
-                        {[50, 100, 200].map(size => <option key={size} value={size}>{size}</option>)}
-                    </select>
-                    <span> records</span>
-                </div>
-                <div className="page-navigation">
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Previous</button>
-                    <span>Page {currentPage} of {totalPages || 1}</span>
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages || totalPages === 0}>Next</button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-export default Body;
+                    
