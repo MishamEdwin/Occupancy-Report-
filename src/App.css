@@ -1,497 +1,80 @@
-
-/* Professional Application Theme */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-.title {
-    font-size: 28px;
-    font-weight: 700;
-    color: #1a1a1a;
-    text-shadow: none;
-    position: relative;
-    display: inline-block;
-    letter-spacing: -0.5px;
-}
-
-.title::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: linear-gradient(90deg, #0066cc, #00a3e0);
-    border-radius: 2px;
-}
-
-.dashboard-container {
-    padding: 40px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    min-height: 100vh;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #1a1a1a;
-}
-
-/* Header/Filter Bar - Professional White */
-.filter-section {
-    background: #ffffff;
-    padding: 20px 28px;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    margin-bottom: 32px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    border: 1px solid #e8ecf1;
-    flex-wrap: wrap;
-}
-
-.filter-label {
-    font-weight: 600;
-    color: #1a1a1a;
-    font-size: 15px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    line-height: 1.4;
-}
-
-/* Custom Dropdown Styling */
-.custom-dropdown {
-    position: relative;
-    width: 300px;
-    font-size: 14px;
-}
-
-.dropdown-selected {
-    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-    padding: 10px 14px;
-    border: 2px solid #e0e6ed;
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #1a1a1a;
-    font-weight: 500;
-    transition: all 0.3s ease;
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-.dropdown-selected:hover {
-    border-color: #0066cc;
-    box-shadow: 0 2px 6px rgba(0, 102, 204, 0.1);
-}
-
-.dropdown-menu {
-    position: absolute;
-    top: 105%;
-    left: 0;
-    width: 100%;
-    background: #ffffff;
-    border: 2px solid #0066cc;
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0, 102, 204, 0.15);
-    z-index: 100;
-    padding: 10px;
-    margin-top: 4px;
-}
-
-.dropdown-search {
-    width: 100%;
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    border: 1px solid #e0e6ed;
-    border-radius: 6px;
-    outline: none;
-    box-sizing: border-box;
-    font-size: 14px;
-    transition: border-color 0.2s;
-}
-
-.dropdown-search:focus {
-    border-color: #0066cc;
-}
-
-/* FIXED SIZE AND SCROLL FOR DROPDOWN OPTIONS */
+/* Dropdown styles */
 .dropdown-options {
-    max-height: 280px;
-    overflow-y: auto;
+  color: #000000;
+  font-weight: 500;
 }
 
-.dropdown-item {
-    padding: 10px 12px;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    font-size: 14px;
-    line-height: 1.5;
+.dropdown-options option {
+  color: #000000;
+  background-color: #ffffff;
+  font-size: 14px;
 }
 
-.dropdown-item:hover {
-    background: #e8f1ff;
+/* Table content - dark styling */
+.table-container {
+  background-color: #1a1a1a;
+  color: #ffffff;
 }
 
-.dropdown-item.active {
-    background: #0066cc;
-    color: #ffffff;
-    font-weight: 600;
+.table-container table {
+  background-color: #1a1a1a;
+  color: #ffffff;
 }
 
-.dropdown-item input[type="checkbox"] {
-    cursor: pointer;
+.table-container th {
+  background-color: #2d2d2d;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 12px;
+  border: 1px solid #404040;
 }
 
-.no-results {
-    padding: 12px;
-    color: #999;
-    text-align: center;
-    font-size: 13px;
+.table-container td {
+  background-color: #1a1a1a;
+  color: #ffffff;
+  padding: 10px;
+  border: 1px solid #404040;
 }
 
-/* Scrollbar styling for dropdown */
-.dropdown-options::-webkit-scrollbar {
-    width: 6px;
-}
-.dropdown-options::-webkit-scrollbar-thumb {
-    background: #c0c9d6;
-    border-radius: 10px;
-}
-.dropdown-options::-webkit-scrollbar-thumb:hover {
-    background: #0066cc;
+.table-container tr:hover {
+  background-color: #2d2d2d;
 }
 
-/* Table Container */
-.table-wrapper {
-    background: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e8ecf1;
-    
-    height: 600px;
-    overflow-y: auto;
-    overflow-x: auto;
-    position: relative;
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-    table-layout: auto;
-    line-height: 1.6;
-}
-
-/* Professional Table Header */
-.data-table thead th {
-    background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
-    color: #ffffff;
-    padding: 18px 16px;
-    font-weight: 700;
-    text-align: left;
-    border-bottom: 2px solid #004d8c;
-    
-    position: sticky;
-    top: 0; 
-    z-index: 10;
-    text-transform: uppercase;
-    font-size: 13px;
-    letter-spacing: 0.6px;
-    line-height: 1.4;
-}
-
-/* Custom Scrollbar Styling */
-.table-wrapper::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-.table-wrapper::-webkit-scrollbar-track {
-    background: #f8f9fa;
-    border-radius: 10px;
-}
-.table-wrapper::-webkit-scrollbar-thumb {
-    background: #c0c9d6;
-    border-radius: 10px;
-}
-.table-wrapper::-webkit-scrollbar-thumb:hover {
-    background: #0066cc;
-}
-
-.header-content {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.sort-label {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.4;
-}
-
-.sort-label:hover {
-    opacity: 0.8;
-}
-
-/* Filter icon button (visible) */
-.filter-icon-btn {
-    border: none;
-    background: #0066cc;
-    border-radius: 8px;
-    padding: 6px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 6px rgba(0, 102, 204, 0.12);
-}
-.filter-icon-btn:hover {
-    background: #0052a3;
-}
-.filter-icon-btn:active {
-    transform: translateY(1px);
-}
-
-/* Dropdowns in the header (select fallback styling kept) */
-.column-filter-select {
-    width: 100%;
-    padding: 6px 8px;
-    border-radius: 5px;
-    border: 1px solid #c0c9d6;
-    background: #f0f5ff;
-    color: #1a1a1a;
-    font-size: 12px;
-    outline: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-weight: 500;
-    line-height: 1.4;
-}
-
-.column-filter-select:hover {
-    border-color: #0066cc;
-}
-
-.column-filter-select:focus {
-    border-color: #0066cc;
-    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
-}
-
-/* Table Body */
-.data-table tbody tr {
-    border-bottom: 1px solid #e8ecf1;
-    transition: all 0.2s ease;
-}
-
-.data-table tbody tr:nth-child(odd) {
-    background-color: #ffffff;
-}
-
-.data-table tbody tr:nth-child(even) {
-    background-color: #f8fafb;
-}
-
-.data-table tbody tr:hover {
-    background-color: #e8f1ff;
-    box-shadow: inset 4px 0 0 0 #0066cc;
-}
-
-.data-table td {
-    padding: 16px 14px;
-    color: #1a1a1a;
-    vertical-align: middle;
-    line-height: 1.6;
-}
-
-/* Data-specific Classes */
-.sl-col {
-    font-weight: 700;
-    color: #6b7280;
-    width: 60px;
-    font-size: 14px;
-}
-
-.segment-cell {
-    font-weight: 700;
-    color: #0066cc;
-    font-size: 14px;
-}
-
-.num-cell {
-    text-align: right;
-    font-family: 'Courier New', monospace;
-    font-weight: 500;
-    color: #1a1a1a;
-    font-size: 14px;
-}
-
-/* Negative value alert color */
-.negative-val {
-    color: #dc2626;
-    font-weight: 700;
-}
-
-/* Selected period centered container */
+/* Selected period container layout */
 .selected-period-container {
-    display: flex;
-    gap: 40px; /* space between values */
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    color: #003b6b;
-    font-weight: 700;
-    font-size: 15px;
-}
-.selected-period-container .period-item {
-    padding: 8px 12px;
-    background: #ffffff;
-    border: 1px solid #e8ecf1;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(3,37,76,0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  margin-bottom: 20px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  gap: 20px;
 }
 
-/* Pagination Styling */
-.pagination-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 28px;
-    padding: 18px 28px;
-    background: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #e8ecf1;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+.period-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.range-selector {
-    font-size: 14px;
-    color: #1a1a1a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    line-height: 1.5;
+.period-info p {
+  margin: 0;
+  font-size: 14px;
+  color: #333333;
 }
 
-.pagination-select {
-    padding: 6px 10px;
-    border: 2px solid #e0e6ed;
-    border-radius: 6px;
-    background: #ffffff;
-    cursor: pointer;
-    font-weight: 600;
-    color: #1a1a1a;
-    transition: all 0.2s;
-    font-size: 14px;
-    line-height: 1.4;
+/* General app styling */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.pagination-select:hover {
-    border-color: #0066cc;
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
 }
-
-.pagination-select:focus {
-    border-color: #0066cc;
-    outline: none;
-}
-
-.page-navigation {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    font-size: 14px;
-    color: #1a1a1a;
-    font-weight: 600;
-    line-height: 1.5;
-}
-
-.total-records {
-    font-size: 13px;
-    color: #6b7280;
-}
-
-.pagination-btn {
-    padding: 8px 16px;
-    border: 2px solid #e0e6ed;
-    background-color: #ffffff;
-    color: #0066cc;
-    border-radius: 6px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-.pagination-btn:hover:not(:disabled) {
-    background-color: #0066cc;
-    color: white;
-    box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
-    border-color: #0066cc;
-}
-
-.pagination-btn:active:not(:disabled) {
-    transform: scale(0.98);
-}
-
-.pagination-btn:disabled {
-    border-color: #e8ecf1;
-    color: #c0c9d6;
-    cursor: not-allowed;
-    background-color: #f8fafb;
-}
-
-.pagination-info {
-    font-size: 13px;
-    color: #1a1a1a;
-    font-weight: 500;
-}
-
-/* Highlights the All option in dropdown */
-.all-option {
-    font-weight: 700;
-    border-bottom: 2px solid #0066cc;
-    color: #0066cc;
-}
-
-/* Summary Row Styling */
-.summary-row {
-    background-color: #f0f5ff !important;
-    font-weight: 600;
-}
-
-.summary-text {
-    color: #0066cc;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    padding-left: 20px;
-    font-weight: 700;
-    line-height: 1.5;
-}
-
-.summary-row td {
-    border-top: 2px solid #0066cc;
-    border-bottom: 2px solid #0066cc;
-}
-
-/* Responsive tweaks */
-@media (max-width: 900px) {
-    .custom-dropdown { width: 220px; }
-    .dropdown-menu { width: 260px; }
-    .selected-period-container { gap: 20px; font-size: 14px; }
-}
-
