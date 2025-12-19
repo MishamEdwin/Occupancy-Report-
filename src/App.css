@@ -1,3 +1,4 @@
+
 /* Professional Application Theme */
 
 * {
@@ -48,6 +49,7 @@
     align-items: center;
     gap: 20px;
     border: 1px solid #e8ecf1;
+    flex-wrap: wrap;
 }
 
 .filter-label {
@@ -243,7 +245,27 @@
     opacity: 0.8;
 }
 
-/* Dropdowns in the header */
+/* Filter icon button (visible) */
+.filter-icon-btn {
+    border: none;
+    background: #0066cc;
+    border-radius: 8px;
+    padding: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 6px rgba(0, 102, 204, 0.12);
+}
+.filter-icon-btn:hover {
+    background: #0052a3;
+}
+.filter-icon-btn:active {
+    transform: translateY(1px);
+}
+
+/* Dropdowns in the header (select fallback styling kept) */
 .column-filter-select {
     width: 100%;
     padding: 6px 8px;
@@ -320,6 +342,25 @@
 .negative-val {
     color: #dc2626;
     font-weight: 700;
+}
+
+/* Selected period centered container */
+.selected-period-container {
+    display: flex;
+    gap: 40px; /* space between values */
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: #003b6b;
+    font-weight: 700;
+    font-size: 15px;
+}
+.selected-period-container .period-item {
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #e8ecf1;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(3,37,76,0.06);
 }
 
 /* Pagination Styling */
@@ -446,3 +487,11 @@
     border-top: 2px solid #0066cc;
     border-bottom: 2px solid #0066cc;
 }
+
+/* Responsive tweaks */
+@media (max-width: 900px) {
+    .custom-dropdown { width: 220px; }
+    .dropdown-menu { width: 260px; }
+    .selected-period-container { gap: 20px; font-size: 14px; }
+}
+
