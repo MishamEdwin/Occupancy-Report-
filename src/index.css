@@ -11,11 +11,11 @@ function Header(){
 
 const styles = {
     headerContainer: {
-        background: 'linear-gradient(135deg, #0066cc 0%, #0052a3 100%)',
+        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
         padding: '32px 40px',
         marginBottom: '32px',
         borderRadius: '12px',
-        boxShadow: '0 4px 16px rgba(0, 102, 204, 0.2)',
+        boxShadow: '0 8px 25px rgba(99, 102, 241, 0.3)',
         color: '#ffffff'
     },
     headerContent: {
