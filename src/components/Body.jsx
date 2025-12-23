@@ -1,14 +1,24 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import xl_data from '/src/data/xl_data.json';
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer
+} from 'recharts';
 
 function Body() {
     const [data, setData] = useState([]);
-    // Occupancy selection   
+    // Occupancy selection     
     const [selectedOccupancyCombined, setSelectedOccupancyCombined] = useState(['All']);
     const [isCombinedDropdownOpen, setIsCombinedDropdownOpen] = useState(false);
     const [combinedSearch, setCombinedSearch] = useState('');
     const combinedDropdownRef = useRef(null);
-    // Period dropdowns   
+    // Period dropdowns     
     const [isFinDropdownOpen, setIsFinDropdownOpen] = useState(false);
     const [isFromDropdownOpen, setIsFromDropdownOpen] = useState(false);
     const [isToDropdownOpen, setIsToDropdownOpen] = useState(false);
@@ -19,22 +29,19 @@ function Body() {
     const fromDropdownRef = useRef(null);
     const toDropdownRef = useRef(null);
 
-    // Independent filter states for each year block, but GLOBAL sort
+    // Independent filter states for each year block, but GLOBAL sort  
     const [tableConfigs, setTableConfigs] = useState({});
     const [globalSort, setGlobalSort] = useState({ key: null, dir: 'asc' });
 
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
 
-    // Period states   
+    // Period states     
     const [selectedFinYear, setSelectedFinYear] = useState(null);
     const [fromMonth, setFromMonth] = useState(null);
     const [toMonth, setToMonth] = useState(null);
 
-    // View mode   
-    const [viewMode, setViewMode] = useState('aggregated');
-
-    // Column visibility   
+    // Column visibility     
     const [visibleColumns, setVisibleColumns] = useState({
         Segments: true, NOP: true, GWP: true, GIC: true, GEP: true, GicOverGep: true, NOC: true,
         AvgRate: true
@@ -42,14 +49,14 @@ function Body() {
 
     const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
     const [openColumnFilterKey, setOpenColumnFilterKey] = useState(null);
-    const [columnFilterSearch, setColumnFilterSearch] = useState({});
     const columnFilterRefs = useRef({});
 
     useEffect(() => {
         setData(Array.isArray(xl_data) ? xl_data : []);
         const handleClickOutside = (event) => {
             if (combinedDropdownRef.current &&
-                !combinedDropdownRef.current.contains(event.target)) setIsCombinedDropdownOpen(false);
+                !combinedDropdownRef.current.contains(event.target))
+                setIsCombinedDropdownOpen(false);
             if (finDropdownRef.current && !finDropdownRef.current.contains(event.target))
                 setIsFinDropdownOpen(false);
             if (fromDropdownRef.current && !fromDropdownRef.current.contains(event.target))
@@ -199,8 +206,8 @@ function Body() {
     const unifiedTableData = useMemo(() => {
         const years = [selectedFinYear, ...previousTwoYears].filter(Boolean);
         const dataByYear = {};
-
         const rawDataByYear = {};
+
         years.forEach(year => {
             rawDataByYear[year] = getYearlyData(year);
         });
@@ -230,17 +237,14 @@ function Body() {
         years.forEach(year => {
             let items = rawDataByYear[year];
             const config = tableConfigs[year] || { filters: {} };
-
             items = items.filter(row => Object.keys(config.filters).every(k =>
                 config.filters[k] === 'Select' || String(row[k]) === String(config.filters[k])
             ));
-
             const orderedItems = [];
             sortedSegments.forEach(seg => {
                 const row = items.find(r => r.Segments === seg);
                 if (row) orderedItems.push(row);
             });
-
             dataByYear[year] = orderedItems;
         });
 
@@ -265,6 +269,31 @@ function Body() {
     const metrics = ['NOP', 'GWP', 'GIC', 'GEP', 'GicOverGep', 'NOC', 'AvgRate'];
     const visibleMetrics = metrics.filter(m => visibleColumns[m]);
 
+    const paginatedSegments = useMemo(() => {
+        return (unifiedTableData.sortedSegments || []).slice(
+            (currentPage - 1) * itemsPerPage,
+            currentPage * itemsPerPage
+        );
+    }, [unifiedTableData.sortedSegments, currentPage, itemsPerPage]);
+
+    // Data Transformation for Recharts 
+    const chartDataByMetric = useMemo(() => {
+        const result = {};
+        metrics.forEach(metric => {
+            result[metric] = paginatedSegments.map(seg => {
+                const entry = { name: seg };
+                unifiedTableData.years.forEach(year => {
+                    const row = unifiedTableData.dataByYear[year]?.find(r => r.Segments === seg);
+                    entry[year] = row ? row[metric] : 0;
+                });
+                return entry;
+            });
+        });
+        return result;
+    }, [paginatedSegments, unifiedTableData]);
+
+    const yearColors = ['#1e40af', '#0d9488', '#7c3aed'];
+
     return (
         <div className="dashboard-container">
             {/* Filters Section */}
@@ -284,8 +313,8 @@ function Body() {
                                 <div className="dropdown-options">
                                     {financialYears.filter(fy =>
                                         fy.toLowerCase().includes(finSearch.toLowerCase())).map(fy => (
-                                            <div key={fy} className={`dropdown-item ${selectedFinYear === fy ? 'active' :
-                                                ''}`}
+                                            <div key={fy} className={`dropdown-item ${selectedFinYear === fy ? 'active'
+                                                : ''}`}
                                                 onClick={() => {
                                                     setSelectedFinYear(fy); setIsFinDropdownOpen(false);
                                                 }}>{fy}</div>
@@ -311,7 +340,9 @@ function Body() {
                                 <div className="dropdown-options">
                                     {finOrderMonths.map(m => (
                                         <div key={m} className={`dropdown-item ${fromMonth === m ? 'active' : ''}`}
-                                            onClick={() => { setFromMonth(m); setIsFromDropdownOpen(false); }}>{monthNames[m - 1]}</div>
+                                            onClick={() => {
+                                                setFromMonth(m); setIsFromDropdownOpen(false);
+                                            }}>{monthNames[m - 1]}</div>
                                     ))}
                                 </div>
                             </div>
@@ -335,8 +366,8 @@ function Body() {
                                     {finOrderMonths.map(m => {
                                         const isDisabled = finOrderMonths.indexOf(m) <
                                             finOrderMonths.indexOf(fromMonth);
-                                        return <div key={m} className={`dropdown-item ${toMonth === m ? 'active' : ''} 
-${isDisabled ? 'disabled' : ''}`} onClick={() => !isDisabled && (setToMonth(m),
+                                        return <div key={m} className={`dropdown-item ${toMonth === m ? 'active' :
+                                            ''}${isDisabled ? 'disabled' : ''}`} onClick={() => !isDisabled && (setToMonth(m),
                                                 setIsToDropdownOpen(false))}>{monthNames[m - 1]}</div>
                                     })}
                                 </div>
@@ -386,7 +417,7 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
                 <button className="pagination-btn" onClick={() =>
                     setIsCustomizerOpen(!isCustomizerOpen)}>
-                    {isCustomizerOpen ? 'Hide Customize Columns' : 'Customize Table Columns'}
+                    {isCustomizerOpen ? 'Hide Customize Metrics' : 'Customize Metrics Rows'}
                 </button>
             </div>
 
@@ -407,52 +438,71 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
             <div className="table-wrapper">
                 <table className="data-table">
                     <thead>
-                        {/* Row 1: Year Headers */}
                         <tr>
-                            <th rowSpan={3} className="sticky-segment">Segments</th>
+                            <th rowSpan={2} className="sticky-segment" style={{ zIndex: 4 }}>Metrics</th>
                             {unifiedTableData.years.map((year, idx) => (
-                                <th key={year} colSpan={visibleMetrics.length} style={{
+                                <th key={year} colSpan={paginatedSegments.length} style={{
                                     backgroundColor: idx === 0 ? '#1e40af' : idx === 1 ? '#0d9488' : '#7c3aed',
-                                    color: 'white'
+                                    color: 'white',
+                                    textAlign: 'center'
                                 }}>
                                     {year}
                                 </th>
                             ))}
                         </tr>
-                        {/* Row 2: Metric Sort & Filter */}
                         <tr>
-                            {unifiedTableData.years.flatMap((year, yearIdx) => visibleMetrics.map(metric => (
-                                <th key={`${year}-${metric}`} className="sub-header">
+                            {unifiedTableData.years.flatMap((year) =>
+                                paginatedSegments.map((seg) => (
+                                    <th key={`${year}-${seg}`} className="sub-header" style={{
+                                        fontSize: '10px',
+                                        minWidth: '100px'
+                                    }}>
+                                        {seg}
+                                    </th>
+                                ))
+                            )}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {visibleMetrics.map((metric) => (
+                            <tr key={metric}>
+                                <td className="sticky-segment" style={{
+                                    fontWeight: 'bold', backgroundColor:
+                                        '#f8fafc'
+                                }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span onClick={() => updateTableConfig(year, metric, null, 'sort')} style={{
-                                            cursor: 'pointer'
-                                        }}>
+                                        <span onClick={() => updateTableConfig(unifiedTableData.years[0], metric, null,
+                                            'sort')} style={{ cursor: 'pointer' }}>
                                             {metric === 'GicOverGep' ? 'GIC/GEP' : metric === 'AvgRate' ? 'Avg Rate' :
                                                 metric}
-                                            {globalSort.key === metric ? (globalSort.dir ===
-                                                'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                            {globalSort.key === metric ? (globalSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                                         </span>
-                                        <div ref={el => columnFilterRefs.current[`${year}-${metric}`] = el}>
+                                        <div ref={el => columnFilterRefs.current[`global-${metric}`] = el}>
                                             <button className="filter-icon-btn" onClick={() =>
-                                                setOpenColumnFilterKey(openColumnFilterKey?.id === `${year}-${metric}` ? null : {
-                                                    id: `${year}-${metric}`, year, metric
-                                                })}>
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M3 4h18l-6 8v8l-6 4V12L3 4z"/>
+                                                setOpenColumnFilterKey(openColumnFilterKey?.id === `global-${metric}`
+                                                    ? null : { id: `global-${metric}`, metric })}>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" strokeWidth="2">
+                                                    <path d="M3 4h18l-6 8v8l-6 4V12L3 4z" />
                                                 </svg>
                                             </button>
-                                            {openColumnFilterKey?.id === `${year}-${metric}` && (
+                                            {openColumnFilterKey?.id === `global-${metric}` && (
                                                 <div className="dropdown-menu" style={{
-                                                    width: '200px', fontWeight: 'normal', textTransform: 'none'
+                                                    width: '200px', fontWeight:
+                                                        'normal'
                                                 }}>
                                                     <div className="dropdown-item" onClick={() => {
-                                                        updateTableConfig(year, metric, 'Select', 'filter'); setOpenColumnFilterKey(null);
-                                                    }}>Clear</div>
+                                                        unifiedTableData.years.forEach(y => updateTableConfig(y, metric,
+                                                            'Select', 'filter'));
+                                                        setOpenColumnFilterKey(null);
+                                                    }}>Clear All Years</div>
                                                     <div className="dropdown-options" style={{ maxHeight: '200px' }}>
-                                                        {[...new Set(getYearlyData(year).map(r =>
+                                                        {[...new Set(getYearlyData(unifiedTableData.years[0]).map(r =>
                                                             String(r[metric])))].sort().map(opt => (
                                                                 <div key={opt} className="dropdown-item" onClick={() => {
-                                                                    updateTableConfig(year, metric, opt, 'filter'); setOpenColumnFilterKey(null);
+                                                                    unifiedTableData.years.forEach(y => updateTableConfig(y, metric,
+                                                                        opt, 'filter'));
+                                                                    setOpenColumnFilterKey(null);
                                                                 }}>{opt}</div>
                                                             ))}
                                                     </div>
@@ -460,51 +510,128 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                                             )}
                                         </div>
                                     </div>
-                                </th>
-                            )))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {unifiedTableData.sortedSegments?.slice((currentPage - 1) * itemsPerPage, currentPage *
-                            itemsPerPage).map((seg) => (
-                                <tr key={seg}>
-                                    <td className="sticky-segment">{seg}</td>
-                                    {unifiedTableData.years.flatMap((year, yearIdx) => {
-                                        const rowData = unifiedTableData.dataByYear[year]?.find(r => r.Segments === seg)
-                                            || {};
-                                        const bgTint = yearIdx === 0 ? 'rgba(30, 64, 175, 0.06)' :
-                                                      yearIdx === 1 ? 'rgba(13, 148, 136, 0.06)' :
-                                                      'rgba(124, 58, 237, 0.06)';
-                                        return visibleMetrics.map(metric => (
-                                            <td key={`${year}-${seg}-${metric}`} className={`num-cell ${metric ===
-                                                'GicOverGep' ? 'ratio-cell' : ''}`}
-                                                style={{ backgroundColor: bgTint }}>
-                                                {metric === 'Segments' ? (rowData[metric] || '-') : fmtNum(rowData[metric])}
+                                </td>
+                                {unifiedTableData.years.flatMap((year, yearIdx) => {
+                                    const bgTint = yearIdx === 0 ? 'rgba(30, 64, 175, 0.04)' :
+                                        yearIdx === 1 ? 'rgba(13, 148, 136, 0.04)' :
+                                            'rgba(124, 58, 237, 0.04)';
+                                    return paginatedSegments.map((seg) => {
+                                        const rowData = unifiedTableData.dataByYear[year]?.find(r => r.Segments ===
+                                            seg) || {};
+                                        return (
+                                            <td key={`${year}-${seg}-${metric}`} className="num-cell" style={{
+                                                backgroundColor: bgTint, textAlign: 'right'
+                                            }}>
+                                                {fmtNum(rowData[metric])}
                                             </td>
-                                        ));
-                                    })}
-                                </tr>
-                            ))}
+                                        );
+                                    });
+                                })}
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>
 
+            {/* RECHARTS LINE REPRESENTATION SECTION */}
+            <div className="line-representation-section" style={{ marginTop: '40px' }}>
+                <h3 style={{ textAlign: 'center', color: '#1e40af', marginBottom: '30px', fontWeight: 'bold' }}>
+                    Metric Comparison Across Segments (Multi-Year)
+                </h3>
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '20px',
+                    padding: '10px'
+                }}>
+                    {metrics.map((metric, index) => (
+                        <div key={metric} style={{
+                            background: '#fff',
+                            padding: '15px',
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+                            border: '1px solid #e2e8f0',
+                            height: '320px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gridColumn: index === 6 ? '2 / 3' : 'auto' // Centers the last (7th) chart 
+                        }}>
+                            <h4 style={{
+                                textAlign: 'center',
+                                marginBottom: '10px',
+                                fontSize: '14px',
+                                color: '#334155',
+                                borderBottom: '2px solid #f1f5f9',
+                                paddingBottom: '5px'
+                            }}>
+                                {metric === 'GicOverGep' ? 'GIC/GEP' : metric === 'AvgRate' ? 'AVG RATE' : metric}
+                            </h4>
+                            <div style={{ flex: 1, width: '100%' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={chartDataByMetric[metric]} margin={{
+                                        top: 5, right: 5, left: 0,
+                                        bottom: 20
+                                    }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis
+                                            dataKey="name"
+                                            angle={-45}
+                                            textAnchor="end"
+                                            interval={0}
+                                            height={60}
+                                            fontSize={9}
+                                            stroke="#64748b"
+                                        />
+                                        <YAxis fontSize={10} stroke="#64748b" tickFormatter={(v) => v >= 1000 ?
+                                            `${(v / 1000).toFixed(0)}k` : v} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            formatter={(value) => fmtNum(value)}
+                                        />
+                                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{
+                                            fontSize: '10px'
+                                        }} />
+                                        {unifiedTableData.years.map((year, yIdx) => (
+                                            <Line
+                                                key={year}
+                                                type="monotone"
+                                                dataKey={year}
+                                                stroke={yearColors[yIdx % yearColors.length]}
+                                                strokeWidth={2}
+                                                dot={{ r: 3 }}
+                                                activeDot={{ r: 5 }}
+                                            />
+                                        ))}
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             <div className="pagination-container">
-                <select value={itemsPerPage} onChange={e => setItemsPerPage(Number(e.target.value))}
+                <select value={itemsPerPage} onChange={e => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                }}
                     className="pagination-select">
-                    {[50, 100, 200].map(s => <option key={s} value={s}>Show {s}</option>)}
+                    {[10, 20, 50, 100].map(s => <option key={s} value={s}>Show {s} Segments</option>)}
                 </select>
                 <div className="page-navigation">
                     <button className="pagination-btn" onClick={() => setCurrentPage(p => Math.max(1, p -
                         1))} disabled={currentPage === 1}>Prev</button>
-                    <span>Page {currentPage} of {Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage)}</span>
+                    <span>Page {currentPage} of {Math.ceil((unifiedTableData.sortedSegments?.length || 0) /
+                        itemsPerPage)}</span>
                     <button className="pagination-btn" onClick={() => setCurrentPage(p =>
-                        Math.min(Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage), p + 1))} disabled={currentPage >=
-                            Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage)}>Next</button>
+                        Math.min(Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage), p +
+                            1))} disabled={currentPage >=
+                                Math.ceil((unifiedTableData.sortedSegments?.length || 0) /
+                                    itemsPerPage)}>Next</button>
                 </div>
             </div>
         </div>
     );
 }
-
 export default Body;
