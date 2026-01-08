@@ -13,12 +13,10 @@ import {
 
 function Body() {
     const [data, setData] = useState([]);
-    // Occupancy selection     
     const [selectedOccupancyCombined, setSelectedOccupancyCombined] = useState(['All']);
     const [isCombinedDropdownOpen, setIsCombinedDropdownOpen] = useState(false);
     const [combinedSearch, setCombinedSearch] = useState('');
     const combinedDropdownRef = useRef(null);
-    // Period dropdowns     
     const [isFinDropdownOpen, setIsFinDropdownOpen] = useState(false);
     const [isFromDropdownOpen, setIsFromDropdownOpen] = useState(false);
     const [isToDropdownOpen, setIsToDropdownOpen] = useState(false);
@@ -29,19 +27,17 @@ function Body() {
     const fromDropdownRef = useRef(null);
     const toDropdownRef = useRef(null);
 
-    // Independent filter states for each year block, but GLOBAL sort  
-    const [tableConfigs, setTableConfigs] = useState({});
     const [globalSort, setGlobalSort] = useState({ key: null, dir: 'asc' });
+    const [activeFilter, setActiveFilter] = useState({ metric: null, value: null });
+    const [filterMode, setFilterMode] = useState('horizontal'); 
+    const [showModeCloud, setShowModeCloud] = useState(false); // State for the cloud popup
 
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
-
-    // Period states     
     const [selectedFinYear, setSelectedFinYear] = useState(null);
     const [fromMonth, setFromMonth] = useState(null);
     const [toMonth, setToMonth] = useState(null);
 
-    // Column visibility     
     const [visibleColumns, setVisibleColumns] = useState({
         Segments: true, NOP: true, GWP: true, GIC: true, GEP: true, GicOverGep: true, NOC: true,
         AvgRate: true
@@ -54,8 +50,7 @@ function Body() {
     useEffect(() => {
         setData(Array.isArray(xl_data) ? xl_data : []);
         const handleClickOutside = (event) => {
-            if (combinedDropdownRef.current &&
-                !combinedDropdownRef.current.contains(event.target))
+            if (combinedDropdownRef.current && !combinedDropdownRef.current.contains(event.target))
                 setIsCombinedDropdownOpen(false);
             if (finDropdownRef.current && !finDropdownRef.current.contains(event.target))
                 setIsFinDropdownOpen(false);
@@ -95,12 +90,12 @@ function Body() {
 
     const processedData = useMemo(() => {
         return data.map((row, index) => {
-            const GWP = parseNumber(row['Prem']);
-            const NOP = parseNumber(row['Net Pol']);
-            const GIC = parseNumber(row['Claim incurred in period']);
-            const GEP = parseNumber(row['Earned Prem']);
-            const NOC = parseNumber(row['Num claim registered']);
-            const deltaRiskSI = parseNumber(row['Delta risk SI']);
+            const GWP = parseNumber(row['GWP']);
+            const NOP = parseNumber(row['NOP']);
+            const GIC = parseNumber(row['GIC']);
+            const GEP = parseNumber(row['GEP']);
+            const NOC = parseNumber(row['NOC']);
+            const actSI = parseNumber(row['Act SI']);
             let monthNum = null; let finYear = null;
             const finRaw = row['Financial (GWP)'] || '';
             try {
@@ -118,9 +113,9 @@ function Body() {
                 id: index,
                 Segments: row['UW Sub Channel'] || row['UW sub channel'] || '(None)',
                 OccupancyCombined: combinedLabel,
-                NOP, GWP, GIC, GEP, NOC, deltaRiskSI,
+                NOP, GWP, GIC, GEP, NOC, actSI,
                 GicOverGep: GEP === 0 ? 0 : (GIC / GEP),
-                AvgRate: deltaRiskSI === 0 ? 0 : (GWP / deltaRiskSI) * 1000,
+                AvgRate: actSI === 0 ? 0 : (GWP / actSI) * 1000,
                 financialMonthNum: monthNum,
                 financialYear: finYear,
             };
@@ -187,87 +182,78 @@ function Body() {
         const groups = {};
         activeSegments.forEach(seg => groups[seg] = {
             Segments: seg, NOP: 0, GWP: 0, GIC: 0,
-            GEP: 0, NOC: 0, deltaRiskSI: 0
+            GEP: 0, NOC: 0, actSI: 0
         });
         yearFiltered.forEach(row => {
             if (groups[row.Segments]) {
                 groups[row.Segments].NOP += row.NOP; groups[row.Segments].GWP += row.GWP;
                 groups[row.Segments].GIC += row.GIC; groups[row.Segments].GEP += row.GEP;
-                groups[row.Segments].NOC += row.NOC; groups[row.Segments].deltaRiskSI +=
-                    row.deltaRiskSI;
+                groups[row.Segments].NOC += row.NOC; groups[row.Segments].actSI +=
+                    row.actSI;
             }
         });
         return Object.values(groups).map(g => ({
             ...g, GicOverGep: g.GEP === 0 ? 0 : (g.GIC / g.GEP),
-            AvgRate: g.deltaRiskSI === 0 ? 0 : (g.GWP / g.deltaRiskSI) * 1000
+            AvgRate: g.actSI === 0 ? 0 : (g.GWP / g.actSI) * 1000
         }));
     };
 
     const unifiedTableData = useMemo(() => {
         const years = [selectedFinYear, ...previousTwoYears].filter(Boolean);
-        const dataByYear = {};
-        const rawDataByYear = {};
+        if (years.length === 0) return { years: [], dataByYear: {}, sortedSegments: [] };
 
+        const rawDataByYear = {};
         years.forEach(year => {
             rawDataByYear[year] = getYearlyData(year);
         });
 
-        let sortedSegments = activeSegments;
+        const referenceYear = years[0];
+        const referenceData = rawDataByYear[referenceYear] || [];
+
+        let filteredSegments = activeSegments;
+        let filteredMetrics = ['NOP', 'GWP', 'GIC', 'GEP', 'GicOverGep', 'NOC', 'AvgRate'];
+
+        if (activeFilter.metric && activeFilter.value !== null) {
+            if (filterMode === 'horizontal') {
+                const matchingSegments = referenceData
+                    .filter(row => fmtNum(row[activeFilter.metric]) === activeFilter.value)
+                    .map(row => row.Segments);
+                filteredSegments = activeSegments.filter(seg => matchingSegments.includes(seg));
+            } else if (filterMode === 'vertical') {
+                filteredMetrics = [activeFilter.metric];
+            }
+        }
+
+        let sortedSegments = filteredSegments;
         if (globalSort.key) {
-            const referenceYear = years[0];
-            const referenceData = rawDataByYear[referenceYear] || [];
-            const sortKey = globalSort.key;
-            const dir = globalSort.dir;
-
             const valueMap = {};
-            referenceData.forEach(row => {
-                valueMap[row.Segments] = row[sortKey] ?? 0;
-            });
-            activeSegments.forEach(seg => {
-                if (!(seg in valueMap)) valueMap[seg] = 0;
-            });
-
-            sortedSegments = activeSegments.slice().sort((a, b) => {
+            referenceData.forEach(row => valueMap[row.Segments] = row[globalSort.key] ?? 0);
+            sortedSegments = filteredSegments.slice().sort((a, b) => {
                 const av = valueMap[a] ?? 0;
                 const bv = valueMap[b] ?? 0;
-                return dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+                return globalSort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
             });
         }
 
+        const dataByYear = {};
         years.forEach(year => {
-            let items = rawDataByYear[year];
-            const config = tableConfigs[year] || { filters: {} };
-            items = items.filter(row => Object.keys(config.filters).every(k =>
-                config.filters[k] === 'Select' || String(row[k]) === String(config.filters[k])
-            ));
-            const orderedItems = [];
-            sortedSegments.forEach(seg => {
-                const row = items.find(r => r.Segments === seg);
-                if (row) orderedItems.push(row);
+            const items = rawDataByYear[year];
+            dataByYear[year] = sortedSegments.map(seg => {
+                const found = items.find(r => r.Segments === seg);
+                return found || { Segments: seg, NOP: 0, GWP: 0, GIC: 0, GEP: 0, NOC: 0, actSI: 0, GicOverGep: 0, AvgRate: 0 };
             });
-            dataByYear[year] = orderedItems;
         });
 
-        return { years, dataByYear, sortedSegments };
+        return { years, dataByYear, sortedSegments, filteredMetrics };
     }, [selectedFinYear, previousTwoYears, monthsInDisplayRange,
-        selectedOccupancyCombined, tableConfigs, activeSegments, globalSort]);
-
-    const updateTableConfig = (year, key, value, type) => {
-        if (type === 'sort') {
-            const dir = globalSort.key === key && globalSort.dir === 'asc' ? 'desc' : 'asc';
-            setGlobalSort({ key, dir });
-        } else {
-            setTableConfigs(prev => {
-                const current = prev[year] || { filters: {} };
-                return { ...prev, [year]: { ...current, filters: { ...current.filters, [key]: value } } };
-            });
-        }
-    };
+        selectedOccupancyCombined, activeSegments, activeFilter, filterMode, globalSort]);
 
     const toggleColumn = (key) => setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] }));
 
     const metrics = ['NOP', 'GWP', 'GIC', 'GEP', 'GicOverGep', 'NOC', 'AvgRate'];
-    const visibleMetrics = metrics.filter(m => visibleColumns[m]);
+    const visibleMetrics = filterMode === 'vertical' && activeFilter.metric
+        ? unifiedTableData.filteredMetrics
+        : metrics.filter(m => visibleColumns[m]);
 
     const paginatedSegments = useMemo(() => {
         return (unifiedTableData.sortedSegments || []).slice(
@@ -276,7 +262,6 @@ function Body() {
         );
     }, [unifiedTableData.sortedSegments, currentPage, itemsPerPage]);
 
-    // Data Transformation for Recharts 
     const chartDataByMetric = useMemo(() => {
         const result = {};
         metrics.forEach(metric => {
@@ -290,35 +275,33 @@ function Body() {
             });
         });
         return result;
-    }, [paginatedSegments, unifiedTableData]);
+    }, [paginatedSegments, unifiedTableData, metrics]);
 
     const yearColors = ['#1e40af', '#0d9488', '#7c3aed'];
 
+    // Handle Mode Toggle with Cloud effect
+    const handleModeToggle = () => {
+        setFilterMode(prev => prev === 'horizontal' ? 'vertical' : 'horizontal');
+        setShowModeCloud(true);
+        setTimeout(() => setShowModeCloud(false), 2000);
+    };
+
     return (
         <div className="dashboard-container">
-            {/* Filters Section */}
             <div className="filter-section">
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label className="filter-label">FINANCIAL YEAR:</label>
                     <div className="custom-dropdown" ref={finDropdownRef}>
-                        <div className="dropdown-selected" onClick={() =>
-                            setIsFinDropdownOpen(!isFinDropdownOpen)}>
-                            {selectedFinYear || 'Select...'} <span className="arrow">{isFinDropdownOpen ? '▲' :
-                                '▼'}</span>
+                        <div className="dropdown-selected" onClick={() => setIsFinDropdownOpen(!isFinDropdownOpen)}>
+                            {selectedFinYear || 'Select...'} <span className="arrow">{isFinDropdownOpen ? '▲' : '▼'}</span>
                         </div>
                         {isFinDropdownOpen && (
                             <div className="dropdown-menu">
-                                <input type="text" className="dropdown-search" placeholder="Search..."
-                                    value={finSearch} onChange={e => setFinSearch(e.target.value)} autoFocus />
+                                <input type="text" className="dropdown-search" placeholder="Search..." value={finSearch} onChange={e => setFinSearch(e.target.value)} autoFocus />
                                 <div className="dropdown-options">
-                                    {financialYears.filter(fy =>
-                                        fy.toLowerCase().includes(finSearch.toLowerCase())).map(fy => (
-                                            <div key={fy} className={`dropdown-item ${selectedFinYear === fy ? 'active'
-                                                : ''}`}
-                                                onClick={() => {
-                                                    setSelectedFinYear(fy); setIsFinDropdownOpen(false);
-                                                }}>{fy}</div>
-                                        ))}
+                                    {financialYears.filter(fy => fy.toLowerCase().includes(finSearch.toLowerCase())).map(fy => (
+                                        <div key={fy} className={`dropdown-item ${selectedFinYear === fy ? 'active' : ''}`} onClick={() => { setSelectedFinYear(fy); setIsFinDropdownOpen(false); }}>{fy}</div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -328,21 +311,15 @@ function Body() {
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label className="filter-label">FROM MONTH:</label>
                     <div className="custom-dropdown" ref={fromDropdownRef}>
-                        <div className="dropdown-selected" onClick={() =>
-                            setIsFromDropdownOpen(!isFromDropdownOpen)}>
-                            {fromMonth ? monthNames[fromMonth - 1] : 'Select...'} <span
-                                className="arrow">{isFromDropdownOpen ? '▲' : '▼'}</span>
+                        <div className="dropdown-selected" onClick={() => setIsFromDropdownOpen(!isFromDropdownOpen)}>
+                            {fromMonth ? monthNames[fromMonth - 1] : 'Select...'} <span className="arrow">{isFromDropdownOpen ? '▲' : '▼'}</span>
                         </div>
                         {isFromDropdownOpen && (
                             <div className="dropdown-menu">
-                                <input type="text" className="dropdown-search" placeholder="Search..."
-                                    value={fromSearch} onChange={e => setFromSearch(e.target.value)} />
+                                <input type="text" className="dropdown-search" placeholder="Search..." value={fromSearch} onChange={e => setFromSearch(e.target.value)} />
                                 <div className="dropdown-options">
                                     {finOrderMonths.map(m => (
-                                        <div key={m} className={`dropdown-item ${fromMonth === m ? 'active' : ''}`}
-                                            onClick={() => {
-                                                setFromMonth(m); setIsFromDropdownOpen(false);
-                                            }}>{monthNames[m - 1]}</div>
+                                        <div key={m} className={`dropdown-item ${fromMonth === m ? 'active' : ''}`} onClick={() => { setFromMonth(m); setIsFromDropdownOpen(false); }}>{monthNames[m - 1]}</div>
                                     ))}
                                 </div>
                             </div>
@@ -353,22 +330,16 @@ function Body() {
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label className="filter-label">TO MONTH:</label>
                     <div className="custom-dropdown" ref={toDropdownRef}>
-                        <div className="dropdown-selected" onClick={() =>
-                            setIsToDropdownOpen(!isToDropdownOpen)}>
-                            {toMonth ? monthNames[toMonth - 1] : 'Select...'} <span
-                                className="arrow">{isToDropdownOpen ? '▲' : '▼'}</span>
+                        <div className="dropdown-selected" onClick={() => setIsToDropdownOpen(!isToDropdownOpen)}>
+                            {toMonth ? monthNames[toMonth - 1] : 'Select...'} <span className="arrow">{isToDropdownOpen ? '▲' : '▼'}</span>
                         </div>
                         {isToDropdownOpen && (
                             <div className="dropdown-menu">
-                                <input type="text" className="dropdown-search" placeholder="Search..."
-                                    value={toSearch} onChange={e => setToSearch(e.target.value)} />
+                                <input type="text" className="dropdown-search" placeholder="Search..." value={toSearch} onChange={e => setToSearch(e.target.value)} />
                                 <div className="dropdown-options">
                                     {finOrderMonths.map(m => {
-                                        const isDisabled = finOrderMonths.indexOf(m) <
-                                            finOrderMonths.indexOf(fromMonth);
-                                        return <div key={m} className={`dropdown-item ${toMonth === m ? 'active' :
-                                            ''}${isDisabled ? 'disabled' : ''}`} onClick={() => !isDisabled && (setToMonth(m),
-                                                setIsToDropdownOpen(false))}>{monthNames[m - 1]}</div>
+                                        const isDisabled = finOrderMonths.indexOf(m) < finOrderMonths.indexOf(fromMonth);
+                                        return <div key={m} className={`dropdown-item ${toMonth === m ? 'active' : ''}${isDisabled ? 'disabled' : ''}`} onClick={() => !isDisabled && (setToMonth(m), setIsToDropdownOpen(false))}>{monthNames[m - 1]}</div>
                                     })}
                                 </div>
                             </div>
@@ -379,34 +350,26 @@ function Body() {
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label className="filter-label">OCCUPANCY:</label>
                     <div className="custom-dropdown" ref={combinedDropdownRef}>
-                        <div className="dropdown-selected" onClick={() =>
-                            setIsCombinedDropdownOpen(!isCombinedDropdownOpen)}>
-                            {selectedOccupancyCombined.includes('All') ? 'All Selected' :
-                                `${selectedOccupancyCombined.length} selected`}
+                        <div className="dropdown-selected" onClick={() => setIsCombinedDropdownOpen(!isCombinedDropdownOpen)}>
+                            {selectedOccupancyCombined.includes('All') ? 'All Selected' : `${selectedOccupancyCombined.length} selected`}
                             <span className="arrow">{isCombinedDropdownOpen ? '▲' : '▼'}</span>
                         </div>
                         {isCombinedDropdownOpen && (
                             <div className="dropdown-menu">
-                                <input type="text" className="dropdown-search" placeholder="Search..."
-                                    value={combinedSearch} onChange={e => setCombinedSearch(e.target.value)} />
+                                <input type="text" className="dropdown-search" placeholder="Search..." value={combinedSearch} onChange={e => setCombinedSearch(e.target.value)} />
                                 <div className="dropdown-options">
-                                    {combinedOccupancyOptions.filter(opt =>
-                                        opt.toLowerCase().includes(combinedSearch.toLowerCase())).map(opt => (
-                                            <div key={opt} className={`dropdown-item 
-${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
-                                                onClick={() => {
-                                                    if (opt === 'All') setSelectedOccupancyCombined(['All']);
-                                                    else {
-                                                        const filtered = selectedOccupancyCombined.filter(x => x !== 'All');
-
-                                                        setSelectedOccupancyCombined(selectedOccupancyCombined.includes(opt) ? filtered.filter(x => x !==
-                                                            opt) : [...filtered, opt]);
-                                                    }
-                                                }}>
-                                                <input type="checkbox"
-                                                    checked={selectedOccupancyCombined.includes(opt)} readOnly /> {opt}
-                                            </div>
-                                        ))}
+                                    {combinedOccupancyOptions.filter(opt => opt.toLowerCase().includes(combinedSearch.toLowerCase())).map(opt => (
+                                        <div key={opt} className={`dropdown-item ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
+                                            onClick={() => {
+                                                if (opt === 'All') setSelectedOccupancyCombined(['All']);
+                                                else {
+                                                    const filtered = selectedOccupancyCombined.filter(x => x !== 'All');
+                                                    setSelectedOccupancyCombined(selectedOccupancyCombined.includes(opt) ? filtered.filter(x => x !== opt) : [...filtered, opt]);
+                                                }
+                                            }}>
+                                            <input type="checkbox" checked={selectedOccupancyCombined.includes(opt)} readOnly /> {opt}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -414,21 +377,34 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                 </div>
             </div>
 
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                <button className="pagination-btn" onClick={() =>
-                    setIsCustomizerOpen(!isCustomizerOpen)}>
-                    {isCustomizerOpen ? 'Hide Customize Metrics' : 'Customize Metrics Rows'}
+            <div className="table-header-container">
+                <button className="pagination-btn" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setIsCustomizerOpen(!isCustomizerOpen)}>
+                    {isCustomizerOpen ? 'Hide Metrics' : 'Customize Metrics'}
                 </button>
+
+                <div className="mode-toggle-container">
+                    {showModeCloud && (
+                        <div className="mode-cloud">
+                            Mode: <strong>{filterMode.toUpperCase()}</strong>
+                        </div>
+                    )}
+                    <button className="icon-button" title="Toggle Filter Mode" onClick={handleModeToggle}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 3v18M3 12h18" style={{ transform: filterMode === 'vertical' ? 'rotate(90deg)' : 'none', transformOrigin: 'center', transition: '0.3s' }} />
+                            <polyline points="16 16 20 12 16 8" />
+                            <polyline points="8 8 4 12 8 16" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             {isCustomizerOpen && (
-                <div className="column-customizer">
+                <div className="column-customizer" style={{ marginTop: '0', marginBottom: '15px' }}>
                     <div className="column-list">
                         {metrics.map(key => (
                             <div key={key} className="column-item" onClick={() => toggleColumn(key)}>
                                 <input type="checkbox" checked={visibleColumns[key]} readOnly />
-                                <label>{key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' :
-                                    key}</label>
+                                <label>{key === 'GicOverGep' ? 'GIC/GEP' : key === 'AvgRate' ? 'Avg Rate' : key}</label>
                             </div>
                         ))}
                     </div>
@@ -439,12 +415,10 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th rowSpan={2} className="sticky-segment" style={{ zIndex: 4 }}>Metrics</th>
+                            <th rowSpan={2} className="sticky-segment">Metrics</th>
                             {unifiedTableData.years.map((year, idx) => (
                                 <th key={year} colSpan={paginatedSegments.length} style={{
-                                    backgroundColor: idx === 0 ? '#1e40af' : idx === 1 ? '#0d9488' : '#7c3aed',
-                                    color: 'white',
-                                    textAlign: 'center'
+                                    backgroundColor: idx === 0 ? '#1e40af' : idx === 1 ? '#0d9488' : '#7c3aed'
                                 }}>
                                     {year}
                                 </th>
@@ -453,10 +427,7 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                         <tr>
                             {unifiedTableData.years.flatMap((year) =>
                                 paginatedSegments.map((seg) => (
-                                    <th key={`${year}-${seg}`} className="sub-header" style={{
-                                        fontSize: '10px',
-                                        minWidth: '100px'
-                                    }}>
+                                    <th key={`${year}-${seg}`} style={{ fontSize: '10px', minWidth: '110px' }}>
                                         {seg}
                                     </th>
                                 ))
@@ -466,45 +437,26 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                     <tbody>
                         {visibleMetrics.map((metric) => (
                             <tr key={metric}>
-                                <td className="sticky-segment" style={{
-                                    fontWeight: 'bold', backgroundColor:
-                                        '#f8fafc'
-                                }}>
+                                <td className="sticky-segment">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span onClick={() => updateTableConfig(unifiedTableData.years[0], metric, null,
-                                            'sort')} style={{ cursor: 'pointer' }}>
-                                            {metric === 'GicOverGep' ? 'GIC/GEP' : metric === 'AvgRate' ? 'Avg Rate' :
-                                                metric}
+                                        <span onClick={() => {
+                                            const dir = globalSort.key === metric && globalSort.dir === 'asc' ? 'desc' : 'asc';
+                                            setGlobalSort({ key: metric, dir });
+                                        }} style={{ cursor: 'pointer' }}>
+                                            {metric === 'GicOverGep' ? 'GIC/GEP' : metric === 'AvgRate' ? 'Avg Rate' : metric}
                                             {globalSort.key === metric ? (globalSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                                         </span>
-                                        <div ref={el => columnFilterRefs.current[`global-${metric}`] = el}>
-                                            <button className="filter-icon-btn" onClick={() =>
-                                                setOpenColumnFilterKey(openColumnFilterKey?.id === `global-${metric}`
-                                                    ? null : { id: `global-${metric}`, metric })}>
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                                    stroke="currentColor" strokeWidth="2">
-                                                    <path d="M3 4h18l-6 8v8l-6 4V12L3 4z" />
-                                                </svg>
+                                        <div style={{ position: 'relative' }} ref={el => columnFilterRefs.current[`global-${metric}`] = el}>
+                                            <button className="filter-icon-btn" onClick={() => setOpenColumnFilterKey(openColumnFilterKey?.id === `global-${metric}` ? null : { id: `global-${metric}`, metric })}>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 4h18l-6 8v8l-6 4V12L3 4z" /></svg>
                                             </button>
                                             {openColumnFilterKey?.id === `global-${metric}` && (
-                                                <div className="dropdown-menu" style={{
-                                                    width: '200px', fontWeight:
-                                                        'normal'
-                                                }}>
-                                                    <div className="dropdown-item" onClick={() => {
-                                                        unifiedTableData.years.forEach(y => updateTableConfig(y, metric,
-                                                            'Select', 'filter'));
-                                                        setOpenColumnFilterKey(null);
-                                                    }}>Clear All Years</div>
+                                                <div className="dropdown-menu" style={{ position: 'absolute', right: 0, width: '180px', top: '100%', backgroundColor: 'white' }}>
+                                                    <div className="dropdown-item" onClick={() => { setActiveFilter({ metric: null, value: null }); setOpenColumnFilterKey(null); }}>Clear Filter</div>
                                                     <div className="dropdown-options" style={{ maxHeight: '200px' }}>
-                                                        {[...new Set(getYearlyData(unifiedTableData.years[0]).map(r =>
-                                                            String(r[metric])))].sort().map(opt => (
-                                                                <div key={opt} className="dropdown-item" onClick={() => {
-                                                                    unifiedTableData.years.forEach(y => updateTableConfig(y, metric,
-                                                                        opt, 'filter'));
-                                                                    setOpenColumnFilterKey(null);
-                                                                }}>{opt}</div>
-                                                            ))}
+                                                        {[...new Set(getYearlyData(unifiedTableData.years[0] || selectedFinYear).map(r => fmtNum(r[metric])))].sort((a, b) => parseNumber(a) - parseNumber(b)).map(opt => (
+                                                            <div key={opt} className="dropdown-item" onClick={() => { setActiveFilter({ metric, value: opt }); setOpenColumnFilterKey(null); }}>{opt}</div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             )}
@@ -512,16 +464,11 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                                     </div>
                                 </td>
                                 {unifiedTableData.years.flatMap((year, yearIdx) => {
-                                    const bgTint = yearIdx === 0 ? 'rgba(30, 64, 175, 0.04)' :
-                                        yearIdx === 1 ? 'rgba(13, 148, 136, 0.04)' :
-                                            'rgba(124, 58, 237, 0.04)';
+                                    const bgTint = yearIdx === 0 ? 'rgba(30, 64, 175, 0.02)' : yearIdx === 1 ? 'rgba(13, 148, 136, 0.02)' : 'rgba(124, 58, 237, 0.02)';
                                     return paginatedSegments.map((seg) => {
-                                        const rowData = unifiedTableData.dataByYear[year]?.find(r => r.Segments ===
-                                            seg) || {};
+                                        const rowData = unifiedTableData.dataByYear[year]?.find(r => r.Segments === seg) || {};
                                         return (
-                                            <td key={`${year}-${seg}-${metric}`} className="num-cell" style={{
-                                                backgroundColor: bgTint, textAlign: 'right'
-                                            }}>
+                                            <td key={`${year}-${seg}-${metric}`} className="num-cell" style={{ backgroundColor: bgTint }}>
                                                 {fmtNum(rowData[metric])}
                                             </td>
                                         );
@@ -533,75 +480,22 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
                 </table>
             </div>
 
-            {/* RECHARTS LINE REPRESENTATION SECTION */}
             <div className="line-representation-section" style={{ marginTop: '40px' }}>
-                <h3 style={{ textAlign: 'center', color: '#1e40af', marginBottom: '30px', fontWeight: 'bold' }}>
-                    Metric Comparison Across Segments (Multi-Year)
-                </h3>
-
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: '20px',
-                    padding: '10px'
-                }}>
-                    {metrics.map((metric, index) => (
-                        <div key={metric} style={{
-                            background: '#fff',
-                            padding: '15px',
-                            borderRadius: '12px',
-                            boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
-                            border: '1px solid #e2e8f0',
-                            height: '320px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gridColumn: index === 6 ? '2 / 3' : 'auto' // Centers the last (7th) chart 
-                        }}>
-                            <h4 style={{
-                                textAlign: 'center',
-                                marginBottom: '10px',
-                                fontSize: '14px',
-                                color: '#334155',
-                                borderBottom: '2px solid #f1f5f9',
-                                paddingBottom: '5px'
-                            }}>
-                                {metric === 'GicOverGep' ? 'GIC/GEP' : metric === 'AvgRate' ? 'AVG RATE' : metric}
-                            </h4>
-                            <div style={{ flex: 1, width: '100%' }}>
+                <h3 style={{ textAlign: 'center', color: '#1e40af', marginBottom: '30px', fontWeight: 'bold' }}>Metric Comparison Across Segments</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
+                    {metrics.map((metric) => (
+                        <div key={metric} style={{ background: '#fff', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', height: '320px' }}>
+                            <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '14px', color: '#334155' }}>{metric === 'GicOverGep' ? 'GIC/GEP' : metric === 'AvgRate' ? 'AVG RATE' : metric}</h4>
+                            <div style={{ flex: 1, width: '100%', height: '240px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={chartDataByMetric[metric]} margin={{
-                                        top: 5, right: 5, left: 0,
-                                        bottom: 20
-                                    }}>
+                                    <LineChart data={chartDataByMetric[metric]}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis
-                                            dataKey="name"
-                                            angle={-45}
-                                            textAnchor="end"
-                                            interval={0}
-                                            height={60}
-                                            fontSize={9}
-                                            stroke="#64748b"
-                                        />
-                                        <YAxis fontSize={10} stroke="#64748b" tickFormatter={(v) => v >= 1000 ?
-                                            `${(v / 1000).toFixed(0)}k` : v} />
-                                        <Tooltip
-                                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                            formatter={(value) => fmtNum(value)}
-                                        />
-                                        <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{
-                                            fontSize: '10px'
-                                        }} />
+                                        <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} height={60} fontSize={9} />
+                                        <YAxis fontSize={10} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                                        <Tooltip formatter={(value) => fmtNum(value)} />
+                                        <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
                                         {unifiedTableData.years.map((year, yIdx) => (
-                                            <Line
-                                                key={year}
-                                                type="monotone"
-                                                dataKey={year}
-                                                stroke={yearColors[yIdx % yearColors.length]}
-                                                strokeWidth={2}
-                                                dot={{ r: 3 }}
-                                                activeDot={{ r: 5 }}
-                                            />
+                                            <Line key={year} type="monotone" dataKey={year} stroke={yearColors[yIdx % yearColors.length]} strokeWidth={2} dot={{ r: 3 }} />
                                         ))}
                                     </LineChart>
                                 </ResponsiveContainer>
@@ -612,26 +506,17 @@ ${selectedOccupancyCombined.includes(opt) ? 'active' : ''}`}
             </div>
 
             <div className="pagination-container">
-                <select value={itemsPerPage} onChange={e => {
-                    setItemsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                }}
-                    className="pagination-select">
-                    {[10, 20, 50, 100].map(s => <option key={s} value={s}>Show {s} Segments</option>)}
+                <select value={itemsPerPage} onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="pagination-select">
+                    {[10, 20, 50, 100].map(s => <option key={s} value={s}>Show {s} Fields</option>)}
                 </select>
                 <div className="page-navigation">
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => Math.max(1, p -
-                        1))} disabled={currentPage === 1}>Prev</button>
-                    <span>Page {currentPage} of {Math.ceil((unifiedTableData.sortedSegments?.length || 0) /
-                        itemsPerPage)}</span>
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p =>
-                        Math.min(Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage), p +
-                            1))} disabled={currentPage >=
-                                Math.ceil((unifiedTableData.sortedSegments?.length || 0) /
-                                    itemsPerPage)}>Next</button>
+                    <button className="pagination-btn" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Prev</button>
+                    <span style={{ margin: '0 15px', fontWeight: '600' }}>Page {currentPage} of {Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage)}</span>
+                    <button className="pagination-btn" onClick={() => setCurrentPage(p => Math.min(Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage), p + 1))} disabled={currentPage >= Math.ceil((unifiedTableData.sortedSegments?.length || 0) / itemsPerPage)}>Next</button>
                 </div>
             </div>
         </div>
     );
 }
+
 export default Body;
