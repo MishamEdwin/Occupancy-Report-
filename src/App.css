@@ -27,6 +27,12 @@
     border: 1px solid #e1e8ed;
 }
 
+.filter-container-relative{
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
 .filter-label {
     font-weight: 700;
     color: #1e40af;
@@ -71,7 +77,7 @@
     border: 2px solid #6366f1;
     border-radius: 14px;
     box-shadow: 0 16px 40px rgba(99, 102, 241, 0.25);
-    z-index: 1000;
+    z-index: 10000;
     padding: 12px;
     margin-top: 8px;
 }
@@ -102,7 +108,7 @@
     cursor: pointer;
     transition: all 0.2s;
     font-weight: 500;
-    color: #1e293b; /* Fixed: visible text */
+    color: #1e293b;
     display: flex;
     align-items: center;
 }
@@ -114,7 +120,7 @@
 
 .dropdown-item.active {
     background: #6366f1;
-    color: #ffffff !important; /* Strong white text on active */
+    color: #ffffff !important;
     font-weight: 700;
 }
 
@@ -123,47 +129,80 @@
     accent-color: #6366f1;
 }
 
-/* Selected Period + Toggle */
-.selected-period-container {
+/* Table Header Container for Button Positioning */
+.table-header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+
+/* Metric Mode Toggle UI */
+.mode-toggle-container {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 24px;
-    padding: 18px 32px;
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    border-radius: 16px;
-    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.3);
+}
+
+.icon-button {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.icon-button:hover {
+    background: #f1f5f9;
+    border-color: #6366f1;
+    color: #6366f1;
+}
+
+.mode-cloud {
+    position: absolute;
+    bottom: 120%;
+    right: 0;
+    background: #1e293b;
     color: white;
-    font-size: 20px;
-    font-weight: 700;
-    margin: 20px 0;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 10px 15px rgba(0,0,0,0.2);
+    z-index: 1001;
+    pointer-events: none;
+    animation: fadeIn 0.2s ease-out;
 }
 
-.period-item {
-    padding: 10px 20px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
+.mode-cloud::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 15px;
+    border: 6px solid transparent;
+    border-top-color: #1e293b;
 }
 
-/* View Mode Toggle */
-input[type="radio"] {
-    accent-color: white;
-    transform: scale(1.3);
-    margin-right: 10px;
-}
-
-input[type="radio"] + span {
-    color: white;
-    font-weight: 600;
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* Table Wrapper */
 .table-wrapper {
+    position:relative;
     background: #ffffff;
     border-radius: 16px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
     overflow: auto;
     border: 1px solid #e1e8ed;
+    max-height: 700px;
 }
 
 /* Table Styling */
@@ -172,11 +211,25 @@ input[type="radio"] + span {
     border-collapse: separate;
     border-spacing: 0;
     font-size: 14px;
-    min-width: 1400px;
+}
+
+/* Fix for metric filter dropdown appearing behind sticky table elements */
+.data-table .dropdown-menu {
+    z-index: 10000 !important;
+    position: absolute;
+    top:100%;
+    left:0;
+    margin-top: 5px;
+    margin-left: 0;
+    min-width: 220px;
+    background: #ffffff;
+    border: 2px solid #6366f1;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    max-width: 300px;
 }
 
 .data-table th {
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+    background: #4f46e5;
     color: white;
     padding: 16px 12px;
     text-align: center;
@@ -184,24 +237,18 @@ input[type="radio"] + span {
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    border-right: 1px solid #818cf8;
+    border-right: 1px solid rgba(255,255,255,0.2);
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 20;
 }
 
-.data-table th.month-group-header {
-    background: linear-gradient(135deg, #3730a3 0%, #4c1d95 100%);
-    font-size: 15px;
-    font-weight: 800;
-    color: #ffffff;
-}
-
-.data-table thead tr:nth-child(2) th.sub-header {
+/* Second level headers (segments) sticky position */
+.data-table thead tr:nth-child(2) th {
+    top: 48px; 
+    z-index: 20;
     background: #eef2ff;
     color: #3730a3;
-    font-weight: 700;
-    font-size: 12.5px;
     border-bottom: 3px double #6366f1;
 }
 
@@ -213,15 +260,17 @@ input[type="radio"] + span {
     background: white;
 }
 
-.data-table tbody tr:hover td {
-    background: #f0f4ff !important;
+.data-table td.sticky-segment:focus-within,
+.data-table td.sticky-segment:has(.dropdown-menu){
+    z-index:101 !important;
 }
 
-.segment-cell, .sticky-segment {
+/* Core Sticky Column Logic (Left-most column) */
+.sticky-segment {
     position: sticky;
     left: 0;
-    background: #f8fafc;
-    z-index: 5;
+    background: #f8fafc !important;
+    z-index: 30 !important; 
     text-align: left !important;
     font-weight: 700;
     color: #4338ca;
@@ -229,32 +278,22 @@ input[type="radio"] + span {
     min-width: 220px;
 }
 
-.sl-col {
-    position: sticky;
-    left: 0;
-    background: #ffffff;
-    z-index: 6;
-    text-align: center;
-    font-weight: 600;
-    color: #64748b;
+/* Intersection of sticky row and sticky column (Top-left cell) */
+thead .sticky-segment {
+    z-index: 40 !important;
+    background: #3730a3 !important;
+    color: white !important;
+}
+
+.data-table tbody tr:hover td {
+    background: #f0f4ff !important;
 }
 
 .num-cell {
-    font-family: 'Courier New', monospace;
+    font-family: 'Inter', sans-serif;
+    font-variant-numeric: tabular-nums;
     font-weight: 600;
     color: #1e293b;
-}
-
-.ratio-cell {
-    background: #fefce8;
-    color: #854d0e;
-    font-weight: 700;
-}
-
-.avg-rate-cell {
-    background: #f0fdf4;
-    color: #166534;
-    font-weight: 700;
 }
 
 .negative-val {
@@ -265,8 +304,8 @@ input[type="radio"] + span {
 
 /* Scrollbar */
 .table-wrapper::-webkit-scrollbar {
-    height: 12px;
-    width: 12px;
+    height: 10px;
+    width: 10px;
 }
 .table-wrapper::-webkit-scrollbar-thumb {
     background: #a5b4fc;
@@ -311,37 +350,20 @@ input[type="radio"] + span {
     cursor: not-allowed;
 }
 
-
-/* Filter Icon Button - Black SVG */
+/* Filter Icon Button */
 .filter-icon-btn {
     border: none;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 8px;
-    padding: 7px;
+    background: transparent;
+    padding: 4px;
     cursor: pointer;
+    border-radius: 4px;
+    color: #64748b;
     transition: all 0.2s;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
 .filter-icon-btn:hover {
-    background: rgba(255, 255, 255, 0.6);
-}
-
-.filter-icon-btn svg path {
-    stroke: #000000 !important;  /* Black lines */
-    fill: #000000 !important;    /* Black fill */
-}
-
-/* Radio Buttons - Green when checked */
-input[type="radio"] {
-    accent-color: #16a34a; /* Green-600 */
-    transform: scale(1.4);
-    margin-right: 12px;
-    cursor: pointer;
-}
-
-input[type="radio"]:checked {
-    accent-color: #16a34a;
+    background: #e2e8f0;
+    color: #1e40af;
 }
 
 /* Customize Columns Panel */
@@ -350,23 +372,8 @@ input[type="radio"]:checked {
     padding: 20px 28px;
     border-radius: 14px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-    margin: 20px 0;
+    margin: 10px 0 20px 0;
     border: 1px solid #e1e8ed;
-}
-
-.column-customizer-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.column-customizer-title svg {
-    width: 20px;
-    height: 20px;
 }
 
 .column-list {
@@ -405,14 +412,8 @@ input[type="radio"]:checked {
 }
 
 /* Responsive */
-@media (max-width: 1200px) {
-    .custom-dropdown { width: 240px; }
-    .filter-section { gap: 20px; padding: 24px; }
-}
-
 @media (max-width: 900px) {
     .dashboard-container { padding: 20px; }
     .filter-section { flex-direction: column; }
     .custom-dropdown { width: 100%; }
-    .selected-period-container { flex-direction: column; text-align: center; font-size: 18px; }
 }
